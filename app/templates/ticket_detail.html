@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Тикет #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="row mt-4 justify-content-center"><div class="col-lg-8">
+
+    <nav style="font-size:.85rem;margin-bottom:1.5rem;">
+        <a href="/tickets" style="color:var(--brand-accent);text-decoration:none;"><i class="bi bi-arrow-left me-1"></i>Все тикеты</a>
+    </nav>
+
+    <!-- ══ Заголовок ══ -->
+    <div class="card-dark p-4 mb-3">
+        <div class="d-flex align-items-start justify-content-between mb-3">
+            <div>
+                <h5 style="font-weight:700;margin-bottom:.3rem;">
+                    <span class="mono" style="color:var(--brand-accent);">#{{ ticket.id }}</span> &mdash; {{ ticket.equipment.name }}
+                </h5>
+                <div style="font-size:.85rem;color:var(--brand-text-muted);">
+                    {% if ticket.site %}{{ ticket.site.name }} &middot; {% endif %}
+                    Создал <strong style="color:var(--brand-text);">{{ ticket.author.display_name }}</strong>
+                    &middot; {{ ticket.created_at.strftime('%d.%m.%Y в %H:%M') }}
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                {% if ticket.status.value == 'open' %}<span class="badge bg-warning text-dark" style="font-size:.85rem;">Открыт</span>
+                {% elif ticket.status.value == 'in_progress' %}<span class="badge bg-info" style="font-size:.85rem;">В работе</span>
+                {% elif ticket.status.value == 'pending_dept' %}<span class="badge" style="background:var(--brand-warning);color:#000;font-size:.85rem;">Ожидание службы</span>
+                {% elif ticket.status.value == 'resolved' %}<span class="badge bg-success" style="font-size:.85rem;">Решён</span>
+                {% elif ticket.status.value == 'closed' %}<span class="badge" style="background:var(--brand-text-muted);font-size:.85rem;">Закрыт</span>{% endif %}
+            </div>
+        </div>
+        <div class="row g-3 mb-3" style="font-size:.9rem;">
+            <div class="col-sm-4">
+                <div class="label-dark" style="margin-bottom:.2rem;">Исполнитель</div>
+                {% if ticket.assignee %}<strong>{{ ticket.assignee.display_name }}</strong>{% else %}<span style="color:var(--brand-text-muted);">—</span>{% endif %}
+            </div>
+            <div class="col-sm-4">
+                <div class="label-dark" style="margin-bottom:.2rem;">Ответственная служба</div>
+                {{ ticket.responsible_dept or '—' }}
+            </div>
+            <div class="col-sm-4">
+                <div class="label-dark" style="margin-bottom:.2rem;">Дата закрытия</div>
+                {{ ticket.closed_at.strftime('%d.%m.%Y в %H:%M') if ticket.closed_at else '—' }}
+            </div>
+        </div>
+        <div class="label-dark" style="margin-bottom:.4rem;">Описание проблемы</div>
+        <div style="background:var(--brand-dark);border-radius:8px;padding:1rem;line-height:1.6;white-space:pre-wrap;">{{ ticket.description }}</div>
+    </div>
+
+    <!-- ══ Решение ══ -->
+    {% if ticket.resolution_note %}
+    <div class="card-dark p-4 mb-3" style="border-left:3px solid var(--brand-success);">
+        <div style="color:var(--brand-success);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem;font-weight:600;"><i class="bi bi-check-circle me-1"></i>Решение</div>
+        <div style="line-height:1.6;white-space:pre-wrap;">{{ ticket.resolution_note }}</div>
+        {% if ticket.assignee %}<div style="font-size:.8rem;color:var(--brand-text-muted);margin-top:.8rem;">Решил: <strong style="color:var(--brand-text);">{{ ticket.assignee.display_name }}</strong>{% if ticket.closed_at %} &middot; {{ ticket.closed_at.strftime('%d.%m.%Y в %H:%M') }}{% endif %}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ══ Заключение эксперта ══ -->
+    {% if ticket.expert_conclusion or ticket.recommendations %}
+    <div class="card-dark p-4 mb-3" style="border-left:3px solid var(--brand-accent);">
+        <div style="color:var(--brand-accent);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.8rem;font-weight:600;"><i class="bi bi-clipboard2-check me-1"></i>Заключение эксперта</div>
+        {% if ticket.expert_conclusion %}<div style="margin-bottom:.8rem;"><div style="color:var(--brand-text-muted);font-size:.75rem;margin-bottom:.2rem;">Заключение</div><div style="line-height:1.6;white-space:pre-wrap;">{{ ticket.expert_conclusion }}</div></div>{% endif %}
+        {% if ticket.recommendations %}<div><div style="color:var(--brand-text-muted);font-size:.75rem;margin-bottom:.2rem;">Рекомендации</div><div style="line-height:1.6;white-space:pre-wrap;">{{ ticket.recommendations }}</div></div>{% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ══ Файлы ══ -->
+    {% set images = ticket.photos|selectattr('is_image','equalto',1)|list %}
+    {% set docs = ticket.photos|selectattr('is_image','equalto',0)|list %}
+
+    {% if images %}
+    <div class="card-dark p-4 mb-3">
+        <div class="label-dark" style="margin-bottom:.8rem;"><i class="bi bi-camera me-1"></i>Фотоматериалы ({{ images|length }})</div>
+        <div class="row g-2">
+            {% for photo in images %}
+            <div class="col-6 col-md-4 position-relative">
+                <a href="/static/uploads/{{ photo.filename }}" target="_blank">
+                    <img src="/static/uploads/{{ photo.filename }}" alt="{{ photo.original_name }}" class="img-fluid rounded" style="width:100%;height:140px;object-fit:cover;border:1px solid var(--brand-surface-light);">
+                </a>
+                {% if user.role.value in ('engineer','admin') %}
+                <form method="POST" action="/tickets/{{ ticket.id }}/photo/{{ photo.id }}/delete" style="position:absolute;top:6px;right:12px;">
+                    <button type="submit" class="btn btn-sm btn-danger" style="padding:2px 6px;font-size:.7rem;" onclick="return confirm('Удалить?')"><i class="bi bi-x-lg"></i></button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if docs %}
+    <div class="card-dark p-4 mb-3">
+        <div class="label-dark" style="margin-bottom:.8rem;"><i class="bi bi-file-earmark me-1"></i>Документы ({{ docs|length }})</div>
+        {% for d in docs %}
+        <div class="d-flex align-items-center justify-content-between mb-2" style="background:var(--brand-dark);border-radius:6px;padding:.5rem .8rem;">
+            <a href="/static/uploads/{{ d.filename }}" target="_blank" style="color:var(--brand-accent);text-decoration:none;font-size:.9rem;"><i class="bi bi-file-earmark-arrow-down me-1"></i>{{ d.original_name }}</a>
+            {% if user.role.value in ('engineer','admin') %}
+            <form method="POST" action="/tickets/{{ ticket.id }}/photo/{{ d.id }}/delete" style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-outline-danger" style="padding:2px 6px;font-size:.7rem;" onclick="return confirm('Удалить?')"><i class="bi bi-x-lg"></i></button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;padding:.6rem .9rem;font-size:.85rem;margin-bottom:1rem;"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>
+    {% endif %}
+
+    <!-- ══ Действия инженера / админа ══ -->
+    {% if user.role.value in ('engineer','admin') %}
+
+        {% if ticket.status.value == 'open' %}
+        <div class="card-dark p-4 mb-3">
+            <form method="POST" action="/tickets/{{ ticket.id }}/take">
+                <p style="color:var(--brand-text-muted);font-size:.9rem;margin-bottom:1rem;">Тикет не назначен.</p>
+                <button type="submit" class="btn btn-accent"><i class="bi bi-hand-index me-1"></i>Взять в работу</button>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if ticket.status.value in ('in_progress','pending_dept') %}
+        <div class="card-dark p-4 mb-3">
+            <h6 style="font-weight:700;margin-bottom:1rem;"><i class="bi bi-check2-square me-2" style="color:var(--brand-success);"></i>Закрыть тикет</h6>
+            <form method="POST" action="/tickets/{{ ticket.id }}/resolve">
+                <div class="mb-3">
+                    <label class="form-label label-dark">Что было сделано (обязательно)</label>
+                    <textarea name="resolution_note" rows="4" required class="form-control form-dark" placeholder="Опишите решение..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Решено</button>
+            </form>
+        </div>
+        {% endif %}
+
+        <!-- Загрузка файлов -->
+        {% if ticket.photos|length < 10 %}
+        <div class="card-dark p-4 mb-3">
+            <h6 style="font-weight:700;margin-bottom:1rem;"><i class="bi bi-camera me-2" style="color:var(--brand-info);"></i>Добавить файлы</h6>
+            <form method="POST" action="/tickets/{{ ticket.id }}/upload" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <input type="file" name="photos" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" class="form-control form-dark">
+                    <div style="font-size:.78rem;color:var(--brand-text-muted);margin-top:.3rem;">Фото, PDF, Word, Excel. До {{ 10 - ticket.photos|length }} файлов.</div>
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-upload me-1"></i>Загрузить</button>
+            </form>
+            <!-- Clipboard zone -->
+            <div id="clipboardZone" style="margin-top:1rem;border:2px dashed var(--brand-surface-light);border-radius:8px;padding:1rem;text-align:center;color:var(--brand-text-muted);font-size:.85rem;cursor:pointer;transition:border-color .2s;" tabindex="0">
+                <i class="bi bi-clipboard me-1"></i>Нажмите сюда и вставьте изображение (Ctrl+V)
+            </div>
+            <div id="clipboardStatus" style="font-size:.8rem;color:var(--brand-success);margin-top:.4rem;display:none;"></div>
+        </div>
+        {% endif %}
+
+        <!-- Экспертное заключение -->
+        <div class="card-dark p-4 mb-3">
+            <h6 style="font-weight:700;margin-bottom:1rem;"><i class="bi bi-clipboard2-check me-2" style="color:var(--brand-accent);"></i>Экспертное заключение</h6>
+            <form method="POST" action="/tickets/{{ ticket.id }}/expert">
+                <div class="mb-3">
+                    <label class="form-label label-dark">Заключение эксперта</label>
+                    <textarea name="expert_conclusion" rows="3" class="form-control form-dark" placeholder="Описание неисправностей...">{{ ticket.expert_conclusion or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label label-dark">Рекомендации</label>
+                    <textarea name="recommendations" rows="3" class="form-control form-dark" placeholder="Рекомендации...">{{ ticket.recommendations or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label label-dark">Ответственная служба</label>
+                    <input type="text" name="responsible_dept" value="{{ ticket.responsible_dept or '' }}" class="form-control form-dark" placeholder="Механическая служба">
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="send_to_dept" value="1" id="sendToDept">
+                    <label class="form-check-label" for="sendToDept" style="font-size:.85rem;">
+                        Отправить заключение на email службы и перевести в «Ожидание службы»
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-accent btn-sm"><i class="bi bi-save me-1"></i>Сохранить заключение</button>
+            </form>
+        </div>
+
+        {% if ticket.expert_conclusion %}
+        <div class="text-center mb-3">
+            <a href="/tickets/{{ ticket.id }}/print" target="_blank" class="btn btn-outline-light"><i class="bi bi-printer me-1"></i>Сформировать акт (печать)</a>
+        </div>
+        {% endif %}
+
+    {% endif %}
+
+    <!-- Удаление тикета (только admin) -->
+    {% if user.role.value == 'admin' %}
+    <div class="text-center mb-3">
+        <form method="POST" action="/tickets/{{ ticket.id }}/delete" style="display:inline;">
+            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить тикет #{{ ticket.id }} со всеми файлами? Это нельзя отменить.')">
+                <i class="bi bi-trash me-1"></i>Удалить тикет
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+</div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Clipboard paste (Ctrl+V) ──
+(function() {
+    const zone = document.getElementById('clipboardZone');
+    const status = document.getElementById('clipboardStatus');
+    if (!zone) return;
+
+    const ticketId = {{ ticket.id }};
+
+    zone.addEventListener('paste', async function(e) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const blob = item.getAsFile();
+                if (!blob) continue;
+
+                zone.style.borderColor = 'var(--brand-accent)';
+                zone.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Загрузка...';
+
+                const formData = new FormData();
+                formData.append('file', blob, 'clipboard.png');
+
+                try {
+                    const resp = await fetch(`/tickets/${ticketId}/upload-clipboard`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const data = await resp.json();
+                    if (data.ok) {
+                        status.style.display = 'block';
+                        status.textContent = `Вставлено: ${data.original_name}`;
+                        zone.innerHTML = '<i class="bi bi-check-circle me-1"></i>Готово! Вставьте ещё или обновите страницу';
+                        zone.style.borderColor = 'var(--brand-success)';
+                    } else {
+                        zone.innerHTML = `<i class="bi bi-x-circle me-1"></i>${data.error}`;
+                        zone.style.borderColor = 'var(--brand-danger)';
+                    }
+                } catch (err) {
+                    zone.innerHTML = '<i class="bi bi-x-circle me-1"></i>Ошибка сети';
+                    zone.style.borderColor = 'var(--brand-danger)';
+                }
+                break;
+            }
+        }
+    });
+
+    // Focus on click
+    zone.addEventListener('click', () => zone.focus());
+})();
+</script>
+{% endblock %}

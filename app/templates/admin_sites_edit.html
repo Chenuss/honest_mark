@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Редактирование — {{ site.name }}{% endblock %}
+{% block content %}
+<div class="row mt-4 justify-content-center"><div class="col-lg-6">
+    <nav style="font-size:.85rem;margin-bottom:1.5rem;"><a href="/admin/sites" style="color:var(--brand-accent);text-decoration:none;"><i class="bi bi-arrow-left me-1"></i>Площадки</a></nav>
+    <div class="card-dark p-4">
+        <h5 style="font-weight:700;margin-bottom:1.5rem;"><i class="bi bi-pencil me-2" style="color:var(--brand-accent);"></i>Редактирование площадки</h5>
+        {% if error %}<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;padding:.6rem .9rem;font-size:.85rem;margin-bottom:1.2rem;"><i class="bi bi-exclamation-triangle me-1"></i>{{ error }}</div>{% endif %}
+        <form method="POST" action="/admin/sites/edit/{{ site.id }}">
+            <div class="mb-3"><label class="form-label label-dark">Название</label><input type="text" name="name" required value="{{ site.name }}" class="form-control form-dark" autofocus></div>
+            <div class="mb-3"><label class="form-label label-dark">Email поддержки</label><input type="email" name="support_email" value="{{ site.support_email or '' }}" class="form-control form-dark" placeholder="support@factory.ru"></div>
+            <div class="d-flex gap-2"><button type="submit" class="btn btn-accent"><i class="bi bi-check-lg me-1"></i>Сохранить</button><a href="/admin/sites" class="btn btn-outline-secondary">Отмена</a></div>
+        </form>
+    </div>
+</div></div>
+{% endblock %}

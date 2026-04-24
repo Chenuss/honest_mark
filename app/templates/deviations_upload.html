@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Загрузка отклонений ЧЗ{% endblock %}
+{% block content %}
+<div class="row mt-4 justify-content-center"><div class="col-lg-8">
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h4 style="font-weight:700;margin:0;"><i class="bi bi-cloud-upload me-2" style="color:var(--brand-accent);"></i>Выгрузка отклонений ЧЗ</h4>
+        <a href="/deviations/dashboard" class="btn btn-outline-light btn-sm"><i class="bi bi-bar-chart me-1"></i>Дашборд</a>
+    </div>
+
+    {% if success %}<div class="alert alert-success alert-dismissible fade show" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#86efac;" role="alert"><i class="bi bi-check-circle me-2"></i>{{ success }}<button type="button" class="btn-close" data-bs-dismiss="alert" style="filter:invert(1);"></button></div>{% endif %}
+    {% if error %}<div class="alert alert-danger alert-dismissible fade show" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;" role="alert"><i class="bi bi-exclamation-triangle me-2"></i>{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert" style="filter:invert(1);"></button></div>{% endif %}
+
+    <!-- Форма загрузки -->
+    <div class="card-dark p-4 mb-4">
+        <h6 style="font-weight:700;margin-bottom:1rem;"><i class="bi bi-file-earmark-spreadsheet me-2" style="color:var(--brand-info);"></i>Загрузить CSV</h6>
+        <form method="POST" action="/deviations/upload" enctype="multipart/form-data">
+            <div class="mb-3">
+                <input type="file" name="file" accept=".csv" required class="form-control form-dark">
+                <div style="font-size:.78rem;color:var(--brand-text-muted);margin-top:.4rem;">
+                    CSV-файл из сервиса выгрузки отклонений «Честного Знака». Кодировка: UTF-8 или Windows-1251.
+                </div>
+            </div>
+            <button type="submit" class="btn btn-accent"><i class="bi bi-upload me-1"></i>Загрузить и обработать</button>
+        </form>
+    </div>
+
+    <!-- История загрузок -->
+    {% if batches %}
+    <div class="card-dark p-4">
+        <h6 style="font-weight:700;margin-bottom:1rem;">История загрузок</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle" style="color:var(--brand-text);font-size:.88rem;">
+                <thead><tr style="border-bottom:1px solid var(--brand-surface-light);color:var(--brand-text-muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;">
+                    <th>#</th><th>Файл</th><th>Записей</th><th>Дата</th><th></th>
+                </tr></thead>
+                <tbody>
+                    {% for b in batches %}
+                    <tr style="border-bottom:1px solid var(--brand-surface-light);">
+                        <td class="mono" style="color:var(--brand-accent);">{{ b.id }}</td>
+                        <td>{{ b.filename }}</td>
+                        <td><span class="badge bg-info">{{ b.row_count }}</span></td>
+                        <td style="color:var(--brand-text-muted);">{{ b.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                        <td style="text-align:right;">
+                            <a href="/deviations/dashboard?batch_id={{ b.id }}" class="btn btn-sm btn-outline-light me-1" title="Аналитика"><i class="bi bi-bar-chart"></i></a>
+                            {% if user.role.value == 'admin' %}
+                            <form method="POST" action="/deviations/batches/{{ b.id }}/delete" style="display:inline;" onsubmit="return confirm('Удалить загрузку и все записи?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить"><i class="bi bi-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div></div>
+{% endblock %}

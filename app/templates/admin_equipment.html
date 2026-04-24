@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Справочник оборудования{% endblock %}
+{% block extra_css %}<style>.modal-content{background:var(--brand-surface);border:1px solid var(--brand-surface-light);color:var(--brand-text)}.modal-header{border-bottom:1px solid var(--brand-surface-light)}.modal-footer{border-top:1px solid var(--brand-surface-light)}.btn-close{filter:invert(1)}</style>{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mt-4 mb-4">
+    <h4 style="font-weight:700;margin:0;"><i class="bi bi-gear me-2" style="color:var(--brand-accent);"></i>Справочник оборудования</h4>
+    <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#addModal"><i class="bi bi-plus-lg me-1"></i>Добавить</button>
+</div>
+{% if success %}<div class="alert alert-success alert-dismissible fade show" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#86efac;" role="alert"><i class="bi bi-check-circle me-2"></i>{{ success }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}
+{% if error %}<div class="alert alert-danger alert-dismissible fade show" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;" role="alert"><i class="bi bi-exclamation-triangle me-2"></i>{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}
+
+{% if equipment_list %}
+<div class="table-responsive">
+    <table class="table table-hover align-middle" style="color:var(--brand-text);">
+        <thead><tr style="border-bottom:2px solid var(--brand-accent);font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--brand-text-muted);"><th style="width:60px;">ID</th><th>Название</th><th>Площадка</th><th style="width:100px;text-align:center;">Тикетов</th><th style="width:160px;text-align:right;">Действия</th></tr></thead>
+        <tbody>
+            {% for eq in equipment_list %}
+            <tr style="border-bottom:1px solid var(--brand-surface-light);">
+                <td class="mono" style="color:var(--brand-accent);font-weight:600;">{{ eq.id }}</td>
+                <td style="font-weight:600;">{{ eq.name }}</td>
+                <td style="font-size:.85rem;">{{ eq.site_name }}</td>
+                <td style="text-align:center;">{% if eq.ticket_count > 0 %}<span class="badge bg-info">{{ eq.ticket_count }}</span>{% else %}0{% endif %}</td>
+                <td style="text-align:right;">
+                    <a href="/admin/equipment/edit/{{ eq.id }}" class="btn btn-sm btn-outline-light me-1"><i class="bi bi-pencil"></i></a>
+                    {% if eq.ticket_count == 0 %}
+                    <form method="POST" action="/admin/equipment/delete/{{ eq.id }}" style="display:inline;" onsubmit="return confirm('Удалить?')"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+                    {% else %}<button class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-trash"></i></button>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card-dark p-5 text-center"><i class="bi bi-inbox" style="font-size:3rem;color:var(--brand-text-muted);"></i><p class="mt-3" style="color:var(--brand-text-muted);">Оборудование не добавлено</p></div>
+{% endif %}
+
+<div class="modal fade" id="addModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="POST" action="/admin/equipment/add">
+    <div class="modal-header"><h6 class="modal-title" style="font-weight:700;"><i class="bi bi-plus-circle me-1" style="color:var(--brand-accent);"></i>Новое оборудование</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <div class="mb-3"><label class="form-label label-dark">Название</label><input type="text" name="name" required class="form-control form-dark" placeholder="Принтер этикеток №4" autofocus></div>
+        <div class="mb-3"><label class="form-label label-dark">Площадка</label><select name="site_id" class="form-select form-dark"><option value="0">— Без площадки —</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button type="submit" class="btn btn-sm btn-accent"><i class="bi bi-plus me-1"></i>Добавить</button></div>
+</form></div></div></div>
+{% endblock %}

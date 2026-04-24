@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background:
+            radial-gradient(ellipse at 20% 50%, rgba(245,158,11,0.06) 0%, transparent 60%),
+            radial-gradient(ellipse at 80% 20%, rgba(59,130,246,0.04) 0%, transparent 50%),
+            var(--brand-dark);
+    }
+
+    .main-content { display: flex; align-items: center; justify-content: center; width: 100%; }
+
+    .login-card {
+        background: var(--brand-surface);
+        border: 1px solid var(--brand-surface-light);
+        border-radius: 16px;
+        padding: 2.5rem 2.2rem 2rem;
+        width: 100%;
+        max-width: 400px;
+        box-shadow:
+            0 4px 24px rgba(0,0,0,0.3),
+            0 0 0 1px rgba(245,158,11,0.08);
+    }
+
+    .login-logo {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+        color: var(--brand-accent);
+        font-size: 1.5rem;
+        text-align: center;
+        margin-bottom: .3rem;
+    }
+    .login-subtitle {
+        text-align: center;
+        color: var(--brand-text-muted);
+        font-size: .85rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-control-dark {
+        background: var(--brand-dark);
+        border: 1px solid var(--brand-surface-light);
+        color: var(--brand-text);
+        border-radius: 8px;
+        padding: .65rem .9rem;
+        font-size: .92rem;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .form-control-dark::placeholder { color: var(--brand-text-muted); }
+    .form-control-dark:focus {
+        background: var(--brand-dark);
+        color: var(--brand-text);
+        border-color: var(--brand-accent);
+        box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+    }
+
+    .form-label-dark {
+        color: var(--brand-text-muted);
+        font-size: .8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: .35rem;
+    }
+
+    .btn-login {
+        width: 100%;
+        padding: .7rem;
+        font-size: .95rem;
+    }
+
+    .login-error {
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.3);
+        color: #fca5a5;
+        border-radius: 8px;
+        padding: .6rem .9rem;
+        font-size: .85rem;
+        margin-bottom: 1.2rem;
+        text-align: center;
+    }
+
+    /* Скрываем навбар и футер на странице логина */
+    .navbar-custom, .footer-custom { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-card">
+
+    <div class="login-logo">
+        <i class="bi bi-shield-check"></i> ЧестныйЗнак
+    </div>
+    <div class="login-subtitle">Журнал инцидентов &middot; Авторизация</div>
+
+    {% if error %}
+    <div class="login-error">
+        <i class="bi bi-exclamation-triangle me-1"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/login" autocomplete="on">
+
+        <div class="mb-3">
+            <label for="username" class="form-label-dark">Логин</label>
+            <input type="text"
+                   id="username"
+                   name="username"
+                   class="form-control form-control-dark"
+                   placeholder="Введите логин"
+                   required
+                   autofocus>
+        </div>
+
+        <div class="mb-4">
+            <label for="password" class="form-label-dark">Пароль</label>
+            <div class="position-relative">
+                <input type="password"
+                       id="password"
+                       name="password"
+                       class="form-control form-control-dark"
+                       placeholder="Введите пароль"
+                       required>
+                <button type="button"
+                        class="btn btn-link position-absolute top-50 end-0 translate-middle-y text-decoration-none"
+                        style="color:var(--brand-text-muted); font-size:.85rem; padding-right:.8rem;"
+                        onclick="togglePassword()" id="toggleBtn">
+                    <i class="bi bi-eye" id="toggleIcon"></i>
+                </button>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-accent btn-login">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Войти
+        </button>
+
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function togglePassword() {
+        const input = document.getElementById('password');
+        const icon = document.getElementById('toggleIcon');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.replace('bi-eye', 'bi-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.replace('bi-eye-slash', 'bi-eye');
+        }
+    }
+</script>
+{% endblock %}

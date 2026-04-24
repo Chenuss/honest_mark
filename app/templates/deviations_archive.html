@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Архив отклонений ЧЗ{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mt-4 mb-4">
+    <h4 style="font-weight:700;margin:0;"><i class="bi bi-calendar3 me-2" style="color:var(--brand-accent);"></i>Архив отклонений ЧЗ</h4>
+    <a href="/deviations/upload" class="btn btn-accent btn-sm"><i class="bi bi-cloud-upload me-1"></i>Загрузить CSV</a>
+</div>
+
+{% if archive %}
+{% for year, months in archive.items() %}
+<div class="card-dark p-4 mb-3">
+    <h5 class="mono" style="color:var(--brand-accent);font-weight:600;margin-bottom:1rem;">{{ year }}</h5>
+    <div class="row g-2">
+        {% for m in months %}
+        <div class="col-6 col-md-3 col-lg-2">
+            <a href="/deviations/dashboard?year={{ year }}&month={{ m.month }}"
+               class="d-block card-dark p-3 text-center text-decoration-none"
+               style="border:1px solid var(--brand-surface-light);border-radius:8px;transition:border-color .15s;"
+               onmouseover="this.style.borderColor='var(--brand-accent)'" onmouseout="this.style.borderColor='var(--brand-surface-light)'">
+                <div style="font-weight:700;color:var(--brand-text);font-size:.9rem;">{{ m.month_name }}</div>
+                <div class="mono" style="color:var(--brand-accent);font-size:1.2rem;font-weight:600;">{{ m.count }}</div>
+                <div style="font-size:.72rem;color:var(--brand-text-muted);">отклонений</div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    <div style="font-size:.75rem;color:var(--brand-text-muted);margin-top:.8rem;">
+        <i class="bi bi-link-45deg me-1"></i>Публичные ссылки:
+        {% for m in months %}
+        <a href="/analytics/{{ year }}/{{ m.month }}" style="color:var(--brand-info);text-decoration:none;margin-right:.6rem;">/analytics/{{ year }}/{{ '%02d'|format(m.month) }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card-dark p-5 text-center">
+    <i class="bi bi-inbox" style="font-size:3rem;color:var(--brand-text-muted);"></i>
+    <p class="mt-3" style="color:var(--brand-text-muted);">Нет данных. <a href="/deviations/upload" style="color:var(--brand-accent);">Загрузите CSV</a></p>
+</div>
+{% endif %}
+{% endblock %}

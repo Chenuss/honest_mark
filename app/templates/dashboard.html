@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+
+        <!-- Приветствие -->
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                <h4 class="mb-1" style="font-weight:700;">
+                    Добро пожаловать, {{ user.username }}
+                </h4>
+                <p class="mb-0" style="color:var(--brand-text-muted); font-size:.9rem;">
+                    {% if user.role.value == 'worker' %}
+                        Роль: Работник линии &middot; Создавайте тикеты о сбоях оборудования
+                    {% elif user.role.value == 'engineer' %}
+                        Роль: Инженер &middot; Принимайте и решайте инциденты
+                    {% else %}
+                        Роль: Администратор &middot; Полный доступ к системе
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- Быстрые действия по ролям -->
+        <div class="row g-3">
+
+            {% if user.role.value in ('worker', 'admin') %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dark p-4 h-100">
+                    <div class="mb-3">
+                        <i class="bi bi-plus-circle" style="font-size:1.8rem; color:var(--brand-accent);"></i>
+                    </div>
+                    <h6 style="font-weight:700;">Создать тикет</h6>
+                    <p style="color:var(--brand-text-muted); font-size:.85rem;">
+                        Сообщить о сбое оборудования или ПО маркировки
+                    </p>
+                    <a href="/tickets" class="btn btn-accent btn-sm mt-2">
+                        <i class="bi bi-plus me-1"></i>Новый тикет
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if user.role.value in ('engineer', 'admin') %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dark p-4 h-100">
+                    <div class="mb-3">
+                        <i class="bi bi-list-task" style="font-size:1.8rem; color:var(--brand-info);"></i>
+                    </div>
+                    <h6 style="font-weight:700;">Открытые тикеты</h6>
+                    <p style="color:var(--brand-text-muted); font-size:.85rem;">
+                        Просмотреть незакрытые инциденты и взять в работу
+                    </p>
+                    <a href="/tickets" class="btn btn-outline-light btn-sm mt-2">
+                        <i class="bi bi-arrow-right me-1"></i>Перейти
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if user.role.value == 'admin' %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card-dark p-4 h-100">
+                    <div class="mb-3">
+                        <i class="bi bi-gear" style="font-size:1.8rem; color:var(--brand-success);"></i>
+                    </div>
+                    <h6 style="font-weight:700;">Оборудование</h6>
+                    <p style="color:var(--brand-text-muted); font-size:.85rem;">
+                        Управление списком оборудования линий маркировки
+                    </p>
+                    <a href="/admin/equipment" class="btn btn-outline-light btn-sm mt-2">
+                        <i class="bi bi-arrow-right me-1"></i>Управлять
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+        <!-- /row -->
+
+    </div>
+</div>
+{% endblock %}

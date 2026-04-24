@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Акт №{{ ticket.id }} — Технический осмотр</title>
+    <style>
+        @page{size:A4;margin:20mm 15mm 20mm 25mm}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.5;color:#000;background:#fff}
+        .act-page{max-width:210mm;margin:0 auto;padding:20mm 15mm 20mm 25mm}
+        .act-header{text-align:center;margin-bottom:20pt;border-bottom:2px solid #000;padding-bottom:12pt}
+        .act-org{font-size:10pt;text-transform:uppercase;letter-spacing:.1em;color:#444;margin-bottom:6pt}
+        .act-title{font-size:16pt;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4pt}
+        .act-subtitle{font-size:11pt;color:#333}
+        .act-meta{width:100%;margin-bottom:16pt;border-collapse:collapse}
+        .act-meta td{padding:4pt 8pt;font-size:11pt;vertical-align:top}
+        .act-meta .label{font-weight:bold;white-space:nowrap;width:180pt;color:#333}
+        .act-section{margin-bottom:14pt}
+        .act-section-title{font-size:11pt;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #999;padding-bottom:3pt;margin-bottom:8pt}
+        .act-section-body{text-align:justify;white-space:pre-wrap}
+        .act-photos{display:flex;flex-wrap:wrap;gap:8pt;margin-top:6pt}
+        .act-photos img{width:48%;max-height:200pt;object-fit:contain;border:1px solid #ccc}
+        .act-photo-caption{font-size:9pt;color:#666;text-align:center;margin-top:2pt}
+        .act-signatures{margin-top:40pt;page-break-inside:avoid}
+        .act-signatures table{width:100%;border-collapse:collapse}
+        .act-signatures td{padding:20pt 0 0 0;vertical-align:bottom;font-size:11pt}
+        .sig-line{display:inline-block;width:180pt;border-bottom:1px solid #000;margin-left:8pt;text-align:center;font-size:9pt;color:#888;padding-bottom:2pt}
+        .act-footer{margin-top:30pt;text-align:center;font-size:9pt;color:#999;border-top:1px solid #ccc;padding-top:8pt}
+        .no-print{text-align:center;margin:20pt 0}
+        .no-print button{font-family:Arial,sans-serif;font-size:11pt;padding:8pt 32pt;background:#1a1d23;color:#f59e0b;border:2px solid #f59e0b;border-radius:6px;cursor:pointer;font-weight:bold}
+        .no-print button:hover{background:#f59e0b;color:#1a1d23}
+        @media print{.no-print{display:none!important}.act-page{padding:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style>
+</head>
+<body>
+    <div class="no-print"><button onclick="window.print()">&#128424; Печать акта</button></div>
+    <div class="act-page">
+        <div class="act-header">
+            <div class="act-org">
+                {% if ticket.site %}{{ ticket.site.name }} &mdash; {% endif %}Система маркировки «Честный знак»
+            </div>
+            <div class="act-title">Акт технического осмотра оборудования</div>
+            <div class="act-subtitle">№ {{ ticket.id }} от {{ ticket.created_at.strftime('%d.%m.%Y') }}</div>
+        </div>
+
+        <table class="act-meta">
+            {% if ticket.site %}<tr><td class="label">Площадка:</td><td>{{ ticket.site.name }}</td></tr>{% endif %}
+            <tr><td class="label">Объект осмотра:</td><td>{{ ticket.equipment.name }}</td></tr>
+            <tr><td class="label">Дата обращения:</td><td>{{ ticket.created_at.strftime('%d.%m.%Y, %H:%M') }}</td></tr>
+            <tr><td class="label">Инициатор:</td><td>{{ ticket.author.display_name }}</td></tr>
+            {% if ticket.assignee %}<tr><td class="label">Ответственный инженер:</td><td>{{ ticket.assignee.display_name }}</td></tr>{% endif %}
+            {% if ticket.responsible_dept %}<tr><td class="label">Ответственная служба:</td><td>{{ ticket.responsible_dept }}</td></tr>{% endif %}
+            {% if ticket.closed_at %}<tr><td class="label">Дата закрытия:</td><td>{{ ticket.closed_at.strftime('%d.%m.%Y, %H:%M') }}</td></tr>{% endif %}
+            <tr><td class="label">Статус:</td><td>{% if ticket.status.value == 'open' %}Открыт{% elif ticket.status.value == 'in_progress' %}В работе{% elif ticket.status.value == 'pending_dept' %}Ожидание службы{% elif ticket.status.value == 'resolved' %}Решён{% elif ticket.status.value == 'closed' %}Закрыт{% endif %}</td></tr>
+        </table>
+
+        {% set section = [1] %}
+        <div class="act-section"><div class="act-section-title">{{ section[0] }}. Описание неисправности</div><div class="act-section-body">{{ ticket.description }}</div></div>
+
+        {% if ticket.resolution_note %}
+        {% set _ = section.append(section.pop() + 1) %}
+        <div class="act-section"><div class="act-section-title">{{ section[0] }}. Выполненные работы</div><div class="act-section-body">{{ ticket.resolution_note }}</div></div>
+        {% endif %}
+
+        {% if ticket.expert_conclusion %}
+        {% set _ = section.append(section.pop() + 1) %}
+        <div class="act-section"><div class="act-section-title">{{ section[0] }}. Заключение эксперта</div><div class="act-section-body">{{ ticket.expert_conclusion }}</div></div>
+        {% endif %}
+
+        {% if ticket.recommendations %}
+        {% set _ = section.append(section.pop() + 1) %}
+        <div class="act-section"><div class="act-section-title">{{ section[0] }}. Рекомендации</div><div class="act-section-body">{{ ticket.recommendations }}</div></div>
+        {% endif %}
+
+        {% set images = ticket.photos|selectattr('is_image','equalto',1)|list %}
+        {% if images %}
+        <div class="act-section">
+            <div class="act-section-title">Приложение: Фотоматериалы</div>
+            <div class="act-photos">
+                {% for photo in images %}
+                <div style="width:48%;text-align:center;">
+                    <img src="/static/uploads/{{ photo.filename }}" alt="Фото {{ loop.index }}">
+                    <div class="act-photo-caption">Фото {{ loop.index }}. {{ photo.original_name }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="act-signatures">
+            <table>
+                <tr>
+                    <td>Ведущий инженер<br>по маркировке<span class="sig-line">{% if ticket.assignee %}{{ ticket.assignee.display_name }}{% else %}подпись / ФИО{% endif %}</span></td>
+                    <td style="text-align:right;">Представитель<br>{% if ticket.responsible_dept %}{{ ticket.responsible_dept }}{% else %}механической службы{% endif %}<span class="sig-line">подпись / ФИО</span></td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="act-footer">Документ сформирован системой «Журнал инцидентов — Честный знак» &middot; {{ ticket.created_at.strftime('%d.%m.%Y') }}</div>
+    </div>
+</body>
+</html>

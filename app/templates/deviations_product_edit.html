@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Редактирование — {{ product.gtin }}{% endblock %}
+{% block content %}
+<div class="row mt-4 justify-content-center"><div class="col-lg-6">
+    <nav style="font-size:.85rem;margin-bottom:1.5rem;"><a href="/deviations/products" style="color:var(--brand-accent);text-decoration:none;"><i class="bi bi-arrow-left me-1"></i>Справочник</a></nav>
+    <div class="card-dark p-4">
+        <h5 style="font-weight:700;margin-bottom:.3rem;"><i class="bi bi-upc-scan me-2" style="color:var(--brand-accent);"></i>Редактирование продукта</h5>
+        <div class="mono" style="color:var(--brand-accent);font-size:1.1rem;margin-bottom:1.5rem;">{{ product.gtin }}</div>
+        <form method="POST" action="/deviations/products/{{ product.id }}/edit">
+            <div class="mb-3"><label class="form-label label-dark">Название продукта</label>
+                <input type="text" name="name" value="{{ product.name or '' }}" class="form-control form-dark" placeholder="Молоко «Домик в деревне» 3.2% 1л" autofocus></div>
+            <div class="mb-3"><label class="form-label label-dark">Категория</label>
+                <input type="text" name="category" value="{{ product.category or '' }}" class="form-control form-dark" placeholder="Молочная продукция"></div>
+            <div class="d-flex gap-2"><button type="submit" class="btn btn-accent"><i class="bi bi-check-lg me-1"></i>Сохранить</button><a href="/deviations/products" class="btn btn-outline-secondary">Отмена</a></div>
+        </form>
+    </div>
+</div></div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Новый тикет{% endblock %}
+{% block content %}
+<div class="row mt-4 justify-content-center"><div class="col-lg-7">
+    <nav style="font-size:.85rem;margin-bottom:1.5rem;">
+        <a href="/tickets" style="color:var(--brand-accent);text-decoration:none;"><i class="bi bi-arrow-left me-1"></i>Все тикеты</a>
+    </nav>
+    <div class="card-dark p-4">
+        <h5 style="font-weight:700;margin-bottom:1.5rem;"><i class="bi bi-plus-circle me-2" style="color:var(--brand-accent);"></i>Новый инцидент</h5>
+        {% if error %}
+        <div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;padding:.6rem .9rem;font-size:.85rem;margin-bottom:1.2rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>{{ error }}
+        </div>
+        {% endif %}
+        <form method="POST" action="/tickets/create">
+            <div class="mb-3">
+                <label for="site_id" class="form-label label-dark">Площадка</label>
+                <select name="site_id" id="site_id" class="form-select form-dark" onchange="filterEquipment()">
+                    <option value="0">Все площадки</option>
+                    {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="equipment_id" class="form-label label-dark">Оборудование</label>
+                <select name="equipment_id" id="equipment_id" required class="form-select form-dark">
+                    <option value="" disabled selected>Выберите оборудование...</option>
+                    {% for eq in equipment_list %}<option value="{{ eq.id }}" data-site="{{ eq.site_id or 0 }}">{{ eq.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="description" class="form-label label-dark">Описание проблемы</label>
+                <textarea name="description" id="description" rows="5" required class="form-control form-dark"
+                          placeholder="Опишите, что произошло..."></textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-accent"><i class="bi bi-send me-1"></i>Создать тикет</button>
+                <a href="/tickets" class="btn btn-outline-secondary">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div></div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function filterEquipment() {
+    const siteId = document.getElementById('site_id').value;
+    const eqSelect = document.getElementById('equipment_id');
+    const options = eqSelect.querySelectorAll('option[data-site]');
+    options.forEach(opt => {
+        if (siteId === '0' || opt.dataset.site === siteId || opt.dataset.site === '0') {
+            opt.style.display = '';
+        } else {
+            opt.style.display = 'none';
+            if (opt.selected) opt.selected = false;
+        }
+    });
+}
+</script>
+{% endblock %}
