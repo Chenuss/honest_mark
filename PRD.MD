@@ -8,7 +8,7 @@
 
 ## 2. Технический стек
 
-Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5, Jinja2, Chart.js 4 | Data: Pandas | Auth: JWT httponly-cookie | Email: aiosmtplib | OS: Windows Server
+Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5, Jinja2, Chart.js 4 | Data: Pandas | Auth: JWT httponly-cookie | Email: aiosmtplib | OS: Windows Server | Config: python-dotenv (.env)
 
 ## 3. Архитектура данных
 
@@ -29,6 +29,7 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 - Экспертное заключение + email-маршрутизация
 - Загрузка фото/документов, вставка из буфера (Ctrl+V)
 - Печатная форма «Акт технического осмотра»
+- **Email-оповещение руководства**: автоматическая отправка коротких уведомлений при создании и изменении тикета, включая графические вложения (фото). Список получателей настраивается через переменную окружения `MANAGEMENT_EMAILS`.
 
 ## 5. Модуль: Аналитика отклонений ЧЗ
 
@@ -90,3 +91,21 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 - API-интеграция с серверами ЧЗ
 - Telegram-бот, управление пользователями через UI
 - Временные ряды и прогнозирование
+
+## 9. Настройка email-оповещений
+
+### Переменные окружения (.env)
+- `SMTP_HOST` — SMTP-сервер (например, smtp.example.com)
+- `SMTP_PORT` — порт SMTP (587 для TLS, 465 для SSL)
+- `SMTP_USER` — логин для аутентификации на SMTP
+- `SMTP_PASSWORD` — пароль для аутентификации на SMTP
+- `MANAGEMENT_EMAILS` — список email-адресов руководства через запятую (например: `boss@example.com,manager@example.com`)
+
+### Триггеры оповещений
+- Создание нового тикета
+- Загрузка изображения в тикет (через форму или Ctrl+V)
+
+### Формат письма
+- Тема: `[Честный Знак] Тикет #{id} - {статус}`
+- Краткое описание инцидента
+- Прикреплённые графические файлы (PNG, JPG, JPEG)

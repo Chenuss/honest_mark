@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.email_utils import send_expert_conclusion_email
+from app.email_utils import send_expert_conclusion_email, send_management_notification
 from app.models import (
     LineEquipment, ProductionSite, Ticket, TicketPhoto,
     TicketStatus, User, UserRole,
@@ -128,7 +128,7 @@ def ticket_create_form(
 
 # ── POST /tickets/create ──
 @router.post("/create", response_class=HTMLResponse)
-def ticket_create_submit(
+async def ticket_create_submit(
     request: Request,
     equipment_id: int = Form(...),
     description: str = Form(...),
@@ -170,6 +170,19 @@ def ticket_create_submit(
     logger.info(
         "Тикет #%d создан пользователем %s (equipment_id=%d)",
         ticket.id, current_user.username, equipment_id,
+    )
+
+    # Отправка уведомления руководству
+    site_name = ticket.site.name if ticket.site else "не указана"
+    await send_management_notification(
+        ticket_id=ticket.id,
+        equipment_name=equipment.name,
+        site_name=site_name,
+        author_name=current_user.display_name,
+        description=description,
+        status=TicketStatus.open.value,
+        photo_paths=None,  # При создании фото ещё нет
+        is_creation=True,
     )
 
     return RedirectResponse(url=f"/tickets/{ticket.id}", status_code=302)
@@ -318,6 +331,8 @@ async def ticket_upload_files(
     if existing_count + len(photos) > MAX_FILES_PER_TICKET:
         return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=302)
 
+    uploaded_photo_paths = []
+    
     for photo in photos:
         ext = Path(photo.filename or "file.bin").suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
@@ -337,6 +352,10 @@ async def ticket_upload_files(
             original_name=photo.filename or "file",
             is_image=is_image,
         ))
+        
+        # Сохраняем путь к изображению для уведомления
+        if is_image:
+            uploaded_photo_paths.append(str(file_path))
 
         size_kb = len(content) / 1024
         logger.info(
@@ -345,6 +364,22 @@ async def ticket_upload_files(
         )
 
     db.commit()
+    
+    # Если загружены изображения — отправляем уведомление руководству
+    if uploaded_photo_paths:
+        site_name = ticket.site.name if ticket.site else "не указана"
+        equipment_name = ticket.equipment.name if ticket.equipment else "—"
+        await send_management_notification(
+            ticket_id=ticket.id,
+            equipment_name=equipment_name,
+            site_name=site_name,
+            author_name=current_user.display_name,
+            description=ticket.description,
+            status=ticket.status.value,
+            photo_paths=uploaded_photo_paths,
+            is_creation=False,
+        )
+    
     return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=302)
 
 
@@ -392,6 +427,20 @@ async def ticket_upload_clipboard(
     logger.info(
         "Clipboard-вставка к тикету #%d: %s (%.0f KB) пользователем %s",
         ticket_id, original_name, size_kb, current_user.username,
+    )
+
+    # Отправка уведомления руководству о новом изображении
+    site_name = ticket.site.name if ticket.site else "не указана"
+    equipment_name = ticket.equipment.name if ticket.equipment else "—"
+    await send_management_notification(
+        ticket_id=ticket.id,
+        equipment_name=equipment_name,
+        site_name=site_name,
+        author_name=current_user.display_name,
+        description=ticket.description,
+        status=ticket.status.value,
+        photo_paths=[str(file_path)],
+        is_creation=False,
     )
 
     return JSONResponse({"ok": True, "filename": safe_name, "original_name": original_name})
