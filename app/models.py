@@ -72,6 +72,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.worker)
+    is_active = Column(Integer, nullable=False, default=1)  # 1=active, 0=inactive
 
     created_tickets = relationship(
         "Ticket", back_populates="author",

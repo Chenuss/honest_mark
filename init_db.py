@@ -57,6 +57,11 @@ def migrate() -> None:
             print("  + users.full_name")
             conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(255) NULL"))
 
+        # users.is_active
+        if _table_exists(conn, "users") and not _col_exists(conn, "users", "is_active"):
+            print("  + users.is_active")
+            conn.execute(text("ALTER TABLE users ADD COLUMN is_active INT NOT NULL DEFAULT 1"))
+
         # tickets — expert fields
         if _table_exists(conn, "tickets"):
             for col in ("expert_conclusion", "recommendations", "responsible_dept"):
@@ -129,6 +134,7 @@ def seed_users() -> None:
                 password_hash=pwd_context.hash("admin"),
                 role=UserRole.admin,
                 full_name="Администратор Системы",
+                is_active=1,
             ))
             db.commit()
             print("  + Создан пользователь: admin / admin (роль: admin)")

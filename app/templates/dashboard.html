@@ -9,7 +9,7 @@
         <div class="d-flex align-items-center justify-content-between mb-4">
             <div>
                 <h4 class="mb-1" style="font-weight:700;">
-                    Добро пожаловать, {{ user.username }}
+                    Добро пожаловать, {{ user.display_name }}
                 </h4>
                 <p class="mb-0" style="color:var(--brand-text-muted); font-size:.9rem;">
                     {% if user.role.value == 'worker' %}
