@@ -13,7 +13,7 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 ## 3. Архитектура данных
 
 ### ProductionSite — id, name, support_email
-### User — id, username, password_hash, full_name, role (worker/engineer/admin)
+### User — id, username, password_hash, full_name, role (worker/engineer/admin), is_active (1/0)
 ### LineEquipment — id, name, site_id → ProductionSite
 ### Ticket — id, author_id, assignee_id, equipment_id, site_id, status, description, resolution_note, expert_conclusion, recommendations, responsible_dept, created_at, updated_at, closed_at
 ### TicketPhoto — id, ticket_id, filename, original_name, is_image, created_at
@@ -81,6 +81,7 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 | `/tickets/*` | Auth | Тикеты (CRUD) |
 | `/admin/sites/*` | Admin | Площадки |
 | `/admin/equipment/*` | Admin | Оборудование |
+| `/admin/users/*` | Admin | **Пользователи (CRUD, деактивация)** |
 | `/deviations/upload` | Eng/Admin | Загрузка CSV |
 | `/deviations/dashboard` | Eng/Admin | Архив Год→Месяц |
 | `/deviations/dashboard?year=&month=` | Eng/Admin | Дашборд за месяц |
@@ -89,7 +90,7 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 
 ## 8. Out of Scope
 - API-интеграция с серверами ЧЗ
-- Telegram-бот, управление пользователями через UI
+- Telegram-бот
 - Временные ряды и прогнозирование
 
 ## 9. Настройка email-оповещений

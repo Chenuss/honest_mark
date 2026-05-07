@@ -141,3 +141,15 @@ def get_current_user_or_none(request: Request, db: Session = Depends(get_db)) ->
         return None
 
     return db.query(User).filter(User.id == int(user_id)).first()
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    FastAPI Dependency для проверки роли администратора.
+    Если пользователь не admin — кидает 403 Forbidden.
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ только для администраторов")
+    if not current_user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт деактивирован")
+    return current_user

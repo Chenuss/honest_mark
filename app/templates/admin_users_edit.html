@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Редактирование пользователя{% endblock %}
+{% block content %}
+<div class="mt-4 mb-4">
+    <h4 style="font-weight:700;margin:0;"><i class="bi bi-pencil me-2" style="color:var(--brand-accent);"></i>Редактирование пользователя</h4>
+</div>
+
+{% if error %}<div class="alert alert-danger alert-dismissible fade show" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;" role="alert"><i class="bi bi-exclamation-triangle me-2"></i>{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}
+
+<div class="card-dark p-4" style="max-width:600px;">
+    <form method="POST" action="/admin/users/edit/{{ edit_user.id }}">
+        <div class="mb-3">
+            <label class="form-label label-dark">Логин</label>
+            <input type="text" class="form-control form-dark" value="{{ edit_user.username }}" disabled>
+            <small class="text-muted" style="color:var(--brand-text-muted);">Логин нельзя изменить</small>
+        </div>
+        <div class="mb-3">
+            <label class="form-label label-dark">ФИО</label>
+            <input type="text" name="full_name" class="form-control form-dark" value="{{ edit_user.full_name or '' }}" placeholder="Иванов Иван Иванович">
+        </div>
+        <div class="mb-3">
+            <label class="form-label label-dark">Роль</label>
+            <select name="role" required class="form-select form-dark">
+                <option value="worker" {% if edit_user.role.value == 'worker' %}selected{% endif %}>Рабочий (worker)</option>
+                <option value="engineer" {% if edit_user.role.value == 'engineer' %}selected{% endif %}>Инженер (engineer)</option>
+                <option value="admin" {% if edit_user.role.value == 'admin' %}selected{% endif %}>Администратор (admin)</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label label-dark">Новый пароль</label>
+            <input type="password" name="new_password" class="form-control form-dark" placeholder="Оставьте пустым, чтобы не менять">
+            <small class="text-muted" style="color:var(--brand-text-muted);">Если поле пустое — пароль не изменится</small>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent"><i class="bi bi-check-lg me-1"></i>Сохранить</button>
+            <a href="/admin/users" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Назад</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
