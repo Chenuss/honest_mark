@@ -61,6 +61,7 @@ COLUMN_MAP = {
     "наименование товара": "product_name", "товар": "product_name",
     "инн": "inn", "инн участника": "inn",
     "наименование участника": "org_name", "наименование организации": "org_name",
+    "товарная группа": "product_group", "группа товаров": "product_group", "категория товара": "product_group",
 }
 
 
@@ -202,6 +203,7 @@ async def upload_csv(request: Request, file: UploadFile = File(...),
         city_raw = str(row.get("city", "")) if pd.notna(row.get("city")) else ""
         gtin_raw = str(row.get("gtin", "")) if pd.notna(row.get("gtin")) else ""
         gtin_clean = gtin_raw.strip()
+        product_group_raw = str(row.get("product_group", "")) if pd.notna(row.get("product_group")) else ""
 
         if gtin_clean:
             new_gtins.add(gtin_clean)
@@ -215,6 +217,7 @@ async def upload_csv(request: Request, file: UploadFile = File(...),
             registration_date=_parse_date(row.get("registration_date")),
             gtin=gtin_clean or None,
             product_name=str(row.get("product_name", "")).strip() if pd.notna(row.get("product_name")) else None,
+            product_group=product_group_raw.strip() or None,
             inn=str(row.get("inn", "")).strip() if pd.notna(row.get("inn")) else None,
             org_name=str(row.get("org_name", "")).strip() if pd.notna(row.get("org_name")) else None,
         ))
@@ -268,6 +271,7 @@ def dashboard(
     gtin_filter: str = Query(default=""),
     city_filter: str = Query(default=""),
     type_filter: str = Query(default=""),
+    product_group_filter: str = Query(default=""),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -294,6 +298,8 @@ def dashboard(
         q = q.filter(CzDeviation.city == city_filter)
     if type_filter:
         q = q.filter(CzDeviation.deviation_type == type_filter)
+    if product_group_filter:
+        q = q.filter(CzDeviation.product_group == product_group_filter)
 
     total_count = q.count()
 
@@ -305,10 +311,12 @@ def dashboard(
 
     chart_data, worst_address, worst_type, gtin_stats = _build_chart_data(db, q, gtin_map)
 
-    # Фильтр-опции (для этого месяца)
+    # Фильтр-опции (для этого месяца) - без ограничений для всех значений
     all_types = [r[0] for r in q.with_entities(CzDeviation.deviation_type).distinct().all() if r[0]]
     all_cities = [r[0] for r in q.with_entities(CzDeviation.city).distinct().filter(
         CzDeviation.city.isnot(None), CzDeviation.city != "").order_by(CzDeviation.city).all()]
+    all_product_groups = [r[0] for r in q.with_entities(CzDeviation.product_group).distinct().filter(
+        CzDeviation.product_group.isnot(None), CzDeviation.product_group != "").order_by(CzDeviation.product_group).all()]
 
     return templates.TemplateResponse("deviations_dashboard.html", {
         "request": request, "user": current_user,
@@ -316,9 +324,9 @@ def dashboard(
         "total_count": total_count,
         "worst_address": worst_address, "worst_type": worst_type,
         "chart_data_json": json.dumps(chart_data, ensure_ascii=False),
-        "all_types": all_types, "all_cities": all_cities, "all_gtins": all_gtin_codes,
+        "all_types": all_types, "all_cities": all_cities, "all_gtins": all_gtin_codes, "all_product_groups": all_product_groups,
         "gtin_map": gtin_map,
-        "filter_gtin": gtin_filter, "filter_city": city_filter, "filter_type": type_filter,
+        "filter_gtin": gtin_filter, "filter_city": city_filter, "filter_type": type_filter, "filter_product_group": product_group_filter,
         "is_public": False,
     })
 
@@ -353,6 +361,7 @@ def public_dashboard(
     gtin_filter: str = Query(default=""),
     city_filter: str = Query(default=""),
     type_filter: str = Query(default=""),
+    product_group_filter: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
     if month < 1 or month > 12:
@@ -368,6 +377,8 @@ def public_dashboard(
         q = q.filter(CzDeviation.city == city_filter)
     if type_filter:
         q = q.filter(CzDeviation.deviation_type == type_filter)
+    if product_group_filter:
+        q = q.filter(CzDeviation.product_group == product_group_filter)
 
     total_count = q.count()
     if total_count == 0:
@@ -382,6 +393,8 @@ def public_dashboard(
     all_types = [r[0] for r in q.with_entities(CzDeviation.deviation_type).distinct().all() if r[0]]
     all_cities = [r[0] for r in q.with_entities(CzDeviation.city).distinct().filter(
         CzDeviation.city.isnot(None), CzDeviation.city != "").order_by(CzDeviation.city).all()]
+    all_product_groups = [r[0] for r in q.with_entities(CzDeviation.product_group).distinct().filter(
+        CzDeviation.product_group.isnot(None), CzDeviation.product_group != "").order_by(CzDeviation.product_group).all()]
 
     return templates.TemplateResponse("deviations_dashboard.html", {
         "request": request, "user": None,
@@ -389,9 +402,9 @@ def public_dashboard(
         "total_count": total_count,
         "worst_address": worst_address, "worst_type": worst_type,
         "chart_data_json": json.dumps(chart_data, ensure_ascii=False),
-        "all_types": all_types, "all_cities": all_cities, "all_gtins": all_gtin_codes,
+        "all_types": all_types, "all_cities": all_cities, "all_gtins": all_gtin_codes, "all_product_groups": all_product_groups,
         "gtin_map": gtin_map,
-        "filter_gtin": gtin_filter, "filter_city": city_filter, "filter_type": type_filter,
+        "filter_gtin": gtin_filter, "filter_city": city_filter, "filter_type": type_filter, "filter_product_group": product_group_filter,
         "is_public": True,
     })
 

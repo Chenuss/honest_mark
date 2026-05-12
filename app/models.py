@@ -219,6 +219,7 @@ class CzDeviation(Base):
     registration_date = Column(DateTime, nullable=True, index=True)        # Дата и время регистрации
     gtin = Column(String(50), nullable=True, index=True)                   # GTIN товара
     product_name = Column(String(500), nullable=True)                      # Наименование товара
+    product_group = Column(String(200), nullable=True, index=True)         # Товарная группа (молочная, табачная и т.п.)
     inn = Column(String(20), nullable=True)                                # ИНН
     org_name = Column(String(500), nullable=True)                          # Наименование организации
     raw_row = Column(Text, nullable=True)                                  # Полная строка CSV для справки
