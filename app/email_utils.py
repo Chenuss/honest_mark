@@ -153,6 +153,7 @@ async def send_management_notification(
     status: str,
     photo_paths: list[str] | None = None,
     is_creation: bool = True,
+    resolution_note: str | None = None,
 ) -> bool:
     """
     Отправляет короткое уведомление руководству о создании или изменении тикета.
@@ -166,6 +167,7 @@ async def send_management_notification(
     :param status: Статус тикета
     :param photo_paths: Список путей к файлам изображений для вложения
     :param is_creation: True — создание, False — изменение
+    :param resolution_note: Текст решения (если статус изменён на "решено")
     :return: True если хотя бы одно письмо отправлено успешно
     """
     management_emails = _get_management_emails()
@@ -217,27 +219,69 @@ async def send_management_notification(
             
             msg.attach(MIMEText(body, "plain", "utf-8"))
             
-            # Прикрепляем изображения если есть
-            if photo_paths:
-                for photo_path in photo_paths:
-                    path = Path(photo_path)
-                    if path.exists() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}:
-                        try:
-                            with open(path, "rb") as f:
-                                img_data = f.read()
-                            
-                            part = MIMEImage(img_data, name=path.name)
-                            part.add_header(
-                                "Content-Disposition",
-                                "attachment",
-                                filename=path.name,
-                            )
-                            msg.attach(part)
-                        except Exception as img_exc:
-                            logger.warning(
-                                "Не удалось прикрепить изображение %s: %s",
-                                photo_path, img_exc,
-                            )
+            # Добавляем информацию о решении если есть
+            if resolution_note:
+                resolution_part = f"""
+
+─── РЕШЕНИЕ ───
+{resolution_note}
+"""
+                # Пересоздаём текстовую часть с решением
+                body_with_resolution = body + resolution_part
+                msg.replace_header("Subject", subject)  # оставляем тему
+                # Нужно заменить текстовую часть - создадим новое сообщение
+                new_msg = MIMEMultipart("mixed")
+                new_msg["From"] = SMTP_FROM
+                new_msg["To"] = to_email
+                new_msg["Subject"] = subject
+                
+                new_msg.attach(MIMEText(body_with_resolution, "plain", "utf-8"))
+                
+                # Прикрепляем изображения если есть
+                if photo_paths:
+                    for photo_path in photo_paths:
+                        path = Path(photo_path)
+                        if path.exists() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}:
+                            try:
+                                with open(path, "rb") as f:
+                                    img_data = f.read()
+                                
+                                part = MIMEImage(img_data, name=path.name)
+                                part.add_header(
+                                    "Content-Disposition",
+                                    "attachment",
+                                    filename=path.name,
+                                )
+                                new_msg.attach(part)
+                            except Exception as img_exc:
+                                logger.warning(
+                                    "Не удалось прикрепить изображение %s: %s",
+                                    photo_path, img_exc,
+                                )
+                
+                msg = new_msg
+            else:
+                # Прикрепляем изображения если есть (стандартный путь)
+                if photo_paths:
+                    for photo_path in photo_paths:
+                        path = Path(photo_path)
+                        if path.exists() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}:
+                            try:
+                                with open(path, "rb") as f:
+                                    img_data = f.read()
+                                
+                                part = MIMEImage(img_data, name=path.name)
+                                part.add_header(
+                                    "Content-Disposition",
+                                    "attachment",
+                                    filename=path.name,
+                                )
+                                msg.attach(part)
+                            except Exception as img_exc:
+                                logger.warning(
+                                    "Не удалось прикрепить изображение %s: %s",
+                                    photo_path, img_exc,
+                                )
             
             await aiosmtplib.send(
                 msg,

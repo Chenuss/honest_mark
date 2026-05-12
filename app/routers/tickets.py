@@ -230,7 +230,7 @@ def ticket_take(
 
 # ── POST /tickets/{id}/resolve ──
 @router.post("/{ticket_id}/resolve", response_class=HTMLResponse)
-def ticket_resolve(
+async def ticket_resolve(
     request: Request, ticket_id: int,
     resolution_note: str = Form(...),
     db: Session = Depends(get_db),
@@ -255,6 +255,22 @@ def ticket_resolve(
     ticket.resolution_note = resolution_note
     ticket.closed_at = datetime.now(timezone.utc)
     db.commit()
+    
+    # Отправка уведомления руководству о решении с описанием что сделано
+    site_name = ticket.site.name if ticket.site else "не указана"
+    equipment_name = ticket.equipment.name if ticket.equipment else "—"
+    await send_management_notification(
+        ticket_id=ticket.id,
+        equipment_name=equipment_name,
+        site_name=site_name,
+        author_name=current_user.display_name,
+        description=ticket.description,
+        status=TicketStatus.resolved.value,
+        photo_paths=None,
+        is_creation=False,
+        resolution_note=resolution_note,
+    )
+    
     return RedirectResponse(url=f"/tickets/{ticket_id}", status_code=302)
 
 
