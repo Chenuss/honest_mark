@@ -17,9 +17,9 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 ### LineEquipment — id, name, site_id → ProductionSite
 ### Ticket — id, author_id, assignee_id, equipment_id, site_id, status, description, resolution_note, expert_conclusion, recommendations, responsible_dept, created_at, updated_at, closed_at
 ### TicketPhoto — id, ticket_id, filename, original_name, is_image, created_at
-### Product (справочник GTIN) — id, gtin (unique), name, category
+### Product (справочник GTIN) — id, gtin (unique), name, category, product_group (товарная группа ЧЗ: "табачная продукция", "молочная продукция" и т.д.)
 ### CzUploadBatch — id, filename, uploaded_by, row_count, created_at
-### CzDeviation — id, batch_id, deviation_type, address, address_clean, city, registration_date, gtin, product_name, inn, org_name
+### CzDeviation — id, batch_id, deviation_type, address, address_clean, city, registration_date, gtin, product_name, inn, org_name, product_group (товарная группа ЧЗ, копируется из справочника Product)
 
 ## 4. Модуль: Журнал инцидентов
 
@@ -49,15 +49,17 @@ Backend: Python 3.11+, FastAPI | DB: MySQL + SQLAlchemy | Frontend: Bootstrap 5,
 - Bar: топ-10 проблемных адресов
 - Bar: топ-10 продуктов (GTIN → название из справочника)
 - KPI: общее число, самый проблемный адрес, самый частый вид
-- Фильтры: вид отклонения, город, GTIN
+- Фильтры: вид отклонения, город, GTIN, **товарная группа**
 - Палитра Soft Professional
+- **Фильтр "Вид отклонений"**: отображает ВСЕ уникальные значения из данных, без ограничения на 7 самых частых
 
 ### 5.4 Справочник продукции (GTIN)
 - Таблица с поиском и пагинацией
-- Поля: GTIN, название, категория
+- Поля: GTIN, название, категория, **товарная группа**
 - GTIN автоматически создаются при импорте CSV
 - Редактирование: клик по GTIN → страница редактирования
 - На дашборде GTIN заменяются на названия из справочника
+- **Товарная группа заполняется вручную или автоматически при импорте (если есть mapping в CSV)**
 
 ### 5.5 Публичный дашборд
 - `/analytics/{год}/{месяц}` — полноценный дашборд без навбара

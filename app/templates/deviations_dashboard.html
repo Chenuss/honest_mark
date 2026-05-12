@@ -61,25 +61,31 @@ code,.mono{font-family:'JetBrains Mono',monospace}
 <div class="card-dark p-3 mb-4">
     <form method="GET" action="{% if is_public %}/analytics/{{ year }}/{{ month }}{% else %}/deviations/dashboard{% endif %}" class="row g-2 align-items-end">
         {% if not is_public %}<input type="hidden" name="year" value="{{ year }}"><input type="hidden" name="month" value="{{ month }}">{% endif %}
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <label class="form-label label-dark">Товарная группа</label>
+            <select name="product_group_filter" class="form-select form-select-sm form-dark">
+                <option value="">Все</option>{% for pg in all_product_groups %}<option value="{{ pg }}" {% if filter_product_group == pg %}selected{% endif %}>{{ pg[:30] }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
             <label class="form-label label-dark">Вид отклонения</label>
             <select name="type_filter" class="form-select form-select-sm form-dark">
                 <option value="">Все</option>{% for t in all_types %}<option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>{{ t[:40] }}</option>{% endfor %}
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label label-dark">Город</label>
             <select name="city_filter" class="form-select form-select-sm form-dark">
                 <option value="">Все</option>{% for c in all_cities %}<option value="{{ c }}" {% if filter_city == c %}selected{% endif %}>{{ c[:30] }}</option>{% endfor %}
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label class="form-label label-dark">GTIN</label>
             <select name="gtin_filter" class="form-select form-select-sm form-dark">
                 <option value="">Все</option>{% for g in all_gtins %}<option value="{{ g }}" {% if filter_gtin == g %}selected{% endif %}>{{ gtin_map.get(g, g) }}</option>{% endfor %}
             </select>
         </div>
-        <div class="col-md-3 d-flex gap-2">
+        <div class="col-md-2 d-flex gap-2">
             <button type="submit" class="btn btn-sm btn-outline-light flex-grow-1"><i class="bi bi-funnel me-1"></i>Применить</button>
             <a href="{% if is_public %}/analytics/{{ year }}/{{ month }}{% else %}/deviations/dashboard?year={{ year }}&month={{ month }}{% endif %}" class="btn btn-sm btn-outline-secondary">Сбросить</a>
         </div>

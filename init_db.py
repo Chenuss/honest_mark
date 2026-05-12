@@ -103,6 +103,11 @@ def migrate() -> None:
             print("  + ticket_photos.is_image")
             conn.execute(text("ALTER TABLE ticket_photos ADD COLUMN is_image INT NOT NULL DEFAULT 1"))
 
+        # cz_deviations.product_group
+        if _table_exists(conn, "cz_deviations") and not _col_exists(conn, "cz_deviations", "product_group"):
+            print("  + cz_deviations.product_group")
+            conn.execute(text("ALTER TABLE cz_deviations ADD COLUMN product_group VARCHAR(200) NULL"))
+
         # TicketStatus — pending_dept
         if _table_exists(conn, "tickets"):
             r = conn.execute(text(
