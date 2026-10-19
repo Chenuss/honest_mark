@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% import "crpt_support/macros.html" as cz %}
+{% block title %}{{ case.sr_number or 'Кейс ТП ЧЗ' }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cz-badge{display:inline-block;padding:.25em .6em;border-radius:5px;font-size:.72rem;font-weight:700;
+            font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;}
+  .cz-b-new{background:var(--brand-info);color:#fff}
+  .cz-b-waitnum{background:#6366f1;color:#fff}
+  .cz-b-progress{background:var(--brand-warning);color:#000}
+  .cz-b-clarify{background:var(--brand-danger);color:#fff;animation:czblink 1.2s ease-in-out infinite}
+  .cz-b-resolved{background:var(--brand-success);color:#000}
+  .cz-b-closed{background:var(--brand-text-muted);color:#000}
+  .cz-b-overdue{background:#dc2626;color:#fff;box-shadow:0 0 8px rgba(239,68,68,.6)}
+  @keyframes czblink{0%,100%{opacity:1}50%{opacity:.35}}
+  .cz-progress{background:var(--brand-dark);border:1px solid var(--brand-surface-light);
+               border-radius:4px;height:10px;width:110px;overflow:hidden;flex-shrink:0}
+  .cz-progress-fill{height:100%;background:var(--brand-accent);border-radius:3px;transition:width .3s}
+  .cz-pf-warn{background:var(--brand-warning)}
+  .cz-pf-danger{background:var(--brand-danger)}
+  .tl{position:relative;padding-left:1.6rem;}
+  .tl:before{content:"";position:absolute;left:.45rem;top:.3rem;bottom:.3rem;width:2px;background:var(--brand-surface-light);}
+  .tl-item{position:relative;margin-bottom:1.1rem;}
+  .tl-dot{position:absolute;left:-1.45rem;top:.35rem;width:.85rem;height:.85rem;border-radius:50%;border:2px solid var(--brand-surface);}
+  .tl-out .tl-dot{background:var(--brand-accent);}
+  .tl-in .tl-dot{background:var(--brand-info);}
+  .mail-card{background:var(--brand-dark);border:1px solid var(--brand-surface-light);border-radius:8px;padding:.9rem 1rem;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mt-4 justify-content-center"><div class="col-lg-9">
+
+  <nav style="font-size:.85rem;margin-bottom:1.5rem;">
+    <a href="/crpt-support" style="color:var(--brand-accent);text-decoration:none;"><i class="bi bi-arrow-left me-1"></i>ТП ЧЗ — все обращения</a>
+  </nav>
+
+  {% if request.query_params.get('clarified') %}
+  <div class="card-dark p-3 mb-3" style="border-left:3px solid var(--brand-success);font-size:.88rem;">
+    <i class="bi bi-send-check me-1" style="color:var(--brand-success);"></i>Уточнение отправлено в ЦРПТ, отсчёт 48ч возобновлён.
+  </div>
+  {% endif %}
+
+  <!-- ══ Шапка кейса ══ -->
+  <div class="card-dark p-4 mb-3">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h5 style="font-weight:700;margin-bottom:.3rem;">
+          <span class="mono" style="color:var(--brand-accent);">{{ case.sr_number or ('#' ~ case.id) }}</span> &mdash; {{ case.subject }}
+        </h5>
+        <div style="font-size:.85rem;color:var(--brand-text-muted);">
+          {{ case.enterprise_name }} (ИНН {{ case.inn }}) &middot; создано
+          {{ case.created_at.strftime('%d.%m.%Y в %H:%M') if case.created_at else '—' }}
+          {% if case.created_by %}&middot; {{ case.created_by.display_name }}{% endif %}
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        {{ cz.status_badge(case.status) }}
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3" style="font-size:.87rem;">
+      <div class="col-sm-3"><div class="label-dark">GTIN</div><span class="mono">{{ case.gtin or '—' }}</span></div>
+      <div class="col-sm-3"><div class="label-dark">Ошибка API</div><span class="mono">{{ case.error_code or '—' }}</span></div>
+      <div class="col-sm-3"><div class="label-dark">Doc ID</div><span class="mono">{{ case.doc_id or '—' }}</span></div>
+      <div class="col-sm-3"><div class="label-dark">Связанный тикет</div>
+        {% if case.related_internal_ticket_id %}<a href="/tickets/{{ case.related_internal_ticket_id }}" style="color:var(--brand-accent);">#{{ case.related_internal_ticket_id }}</a>{% else %}—{% endif %}
+      </div>
+    </div>
+
+    <div class="row g-3" style="font-size:.87rem;">
+      <div class="col-sm-6">
+        <div class="label-dark mb-1">Регламент 48 рабочих часов</div>
+        {{ cz.progress_bar(progress, remaining_hours) }}
+        {% if case.first_response_at %}
+        <div style="font-size:.75rem;color:var(--brand-text-muted);margin-top:.3rem;">
+          Ответ ЦРПТ: {{ case.first_response_at.strftime('%d.%m.%Y %H:%M') }}
+          {% if case.deadline_48h %} &middot; дедлайн: <strong style="color:var(--brand-text);">{{ case.deadline_48h.strftime('%d.%m.%Y %H:%M') }}</strong>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="col-sm-6">
+        <div class="label-dark mb-1">Автозакрытие (3 раб. дня без ответа)</div>
+        {% if auto_close_remaining_h is not none %}
+          <span class="{{ 'cz-badge cz-b-clarify' if auto_close_remaining_h < 24 else 'cz-badge cz-b-progress' }}">
+            осталось {{ '%.0f'|format(auto_close_remaining_h) }} ч
+          </span>
+          <div style="font-size:.75rem;color:var(--brand-text-muted);margin-top:.3rem;">
+            Приостановлен: {{ case.paused_at.strftime('%d.%m.%Y %H:%M') if case.paused_at else '—' }}
+            &middot; закроется: {{ case.auto_close_deadline_3d.strftime('%d.%m.%Y %H:%M') if case.auto_close_deadline_3d else '—' }}
+          </div>
+        {% elif case.resumed_at %}
+          <div style="font-size:.8rem;">Возобновлён: {{ case.resumed_at.strftime('%d.%m.%Y %H:%M') }}</div>
+        {% else %}<span style="color:var(--brand-text-muted);">—</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Результат ══ -->
+  {% if case.result_text %}
+  <div class="card-dark p-4 mb-3" style="border-left:3px solid var(--brand-success);">
+    <div style="color:var(--brand-success);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem;font-weight:600;">
+      <i class="bi bi-check-circle me-1"></i>Решение от ЦРПТ
+    </div>
+    <div style="line-height:1.6;white-space:pre-wrap;font-size:.9rem;">{{ case.result_text }}</div>
+  </div>
+  {% endif %}
+
+  <!-- ══ Текст обращения ══ -->
+  <div class="card-dark p-4 mb-3">
+    <div class="label-dark" style="margin-bottom:.4rem;">Текст обращения</div>
+    <div style="background:var(--brand-dark);border-radius:8px;padding:1rem;line-height:1.6;white-space:pre-wrap;font-size:.88rem;">{{ case.body_text }}</div>
+    {% if attachments %}
+    <div class="mt-2" style="font-size:.8rem;">
+      <span class="label-dark me-2">Вложения:</span>
+      {% for a in attachments %}<span class="badge bg-secondary me-1 mono"><i class="bi bi-paperclip me-1"></i>{{ a.name }}</span>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ══ Кнопки действий ══ -->
+  <div class="d-flex gap-2 mb-4 flex-wrap">
+    {% if case.status.value == 'WAITING_CLARIFICATION' %}
+    <button class="btn btn-accent" data-bs-toggle="collapse" data-bs-target="#clarifyForm">
+      <i class="bi bi-send me-1"></i>Отправить уточнение
+    </button>
+    {% endif %}
+    {% if case.status.value in ('WAITING_CLARIFICATION', 'OVERDUE') %}
+    <form method="post" action="/crpt-support/{{ case.sr_number }}/resume" class="d-inline">
+      <button class="btn btn-outline-info"><i class="bi bi-play-circle me-1"></i>Возобновить</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- ══ Форма уточнения ══ -->
+  <div class="collapse mb-4" id="clarifyForm">
+    <div class="card-dark p-4">
+      <h6 style="font-weight:700;"><i class="bi bi-pencil-square me-2" style="color:var(--brand-accent);"></i>Уточняющая информация для {{ case.sr_number }}</h6>
+      <form method="post" action="/crpt-support/{{ case.sr_number }}/clarification" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label class="label-dark">URL запроса в ЛК / API ЧЗ</label>
+          <input type="url" name="url" class="form-control form-dark mono" placeholder="https://markirovka.crpt.ru/api/v4/...">
+        </div>
+        <div class="mb-3">
+          <label class="label-dark">Тело API-запроса / JSON ошибки</label>
+          <textarea name="api_request" rows="4" class="form-control form-dark mono" placeholder='{"gtin": "04607003503949", "error": {"code": 202, ...}}'></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="label-dark">Комментарий</label>
+          <textarea name="body" rows="3" class="form-control form-dark" required></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="label-dark">Скриншоты / PDF</label>
+          <input type="file" name="files" multiple class="form-control form-dark" accept=".png,.jpg,.jpeg,.pdf">
+        </div>
+        <button type="submit" class="btn btn-accent"><i class="bi bi-send me-1"></i>Отправить в ЦРПТ и снять паузу</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ Лента переписки ══ -->
+  <div class="card-dark p-4">
+    <h6 style="font-weight:700;margin-bottom:1.2rem;"><i class="bi bi-thread me-2" style="color:var(--brand-accent);"></i>Лента переписки</h6>
+    <div class="tl">
+      {% for m in timeline %}
+      <div class="tl-item {{ 'tl-out' if m.direction == 'out' else 'tl-in' }}">
+        <div class="tl-dot"></div>
+        <div style="font-size:.75rem;color:var(--brand-text-muted);margin-bottom:.25rem;">
+          {{ m.received_at.strftime('%d.%m.%Y %H:%M') if m.received_at else '' }}
+          &middot; <strong style="color:var(--brand-text);">{{ 'Мы → ЦРПТ' if m.direction == 'out' else 'ЦРПТ → нам' }}</strong>
+          {% if m.event_type and m.event_type not in ('other','outgoing','clarification_sent') %}
+            {% if m.event_type == 'ack' %}<span class="cz-badge cz-b-progress ms-1">автоответ + номер</span>
+            {% elif m.event_type == 'clarification' %}<span class="cz-badge cz-b-clarify ms-1">запрос уточнения</span>
+            {% elif m.event_type == 'resolved' %}<span class="cz-badge cz-b-resolved ms-1">разрешено</span>{% endif %}
+          {% endif %}
+          {% if m.parsed_sr_number %}<span class="mono ms-1">{{ m.parsed_sr_number }}</span>{% endif %}
+          {% if m.parsed_category %}<span class="ms-1">Категория: {{ m.parsed_category }}</span>{% endif %}
+          {% if m.parsed_priority %}<span class="ms-1">приоритет: {{ m.parsed_priority }}</span>{% endif %}
+        </div>
+        <div class="mail-card" style="font-size:.85rem;white-space:pre-wrap;">{{ (m.body_text or '')[:1200] }}</div>
+      </div>
+      {% else %}
+      <div style="color:var(--brand-text-muted);font-size:.85rem;">Писем пока нет — ждём автоответ support@crpt.ru.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div></div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% macro status_badge(status) -%}
+{%- set s = status.value if status.value is defined else status -%}
+{%- if s == 'NEW' %}<span class="cz-badge cz-b-new">Новый</span>
+{%- elif s == 'WAITING_NUMBER' %}<span class="cz-badge cz-b-waitnum">Ждём номер SR</span>
+{%- elif s == 'IN_PROGRESS' %}<span class="cz-badge cz-b-progress">В работе</span>
+{%- elif s == 'WAITING_CLARIFICATION' %}<span class="cz-badge cz-b-clarify">⚠ Ждёт уточнения</span>
+{%- elif s == 'RESOLVED' %}<span class="cz-badge cz-b-resolved">✓ Решён</span>
+{%- elif s == 'CLOSED' %}<span class="cz-badge cz-b-closed">Закрыт</span>
+{%- elif s == 'OVERDUE' %}<span class="cz-badge cz-b-overdue">✖ Просрочен</span>
+{%- else %}<span class="cz-badge">{{ s }}</span>{% endif -%}
+{%- endmacro %}
+
+{% macro progress_bar(pct, remaining) -%}
+{%- if pct is none %}<span style="color:var(--brand-text-muted);">—</span>
+{%- else %}
+<div class="d-flex align-items-center gap-2">
+  <div class="cz-progress"><div class="cz-progress-fill {{ 'cz-pf-danger' if pct >= 100 else ('cz-pf-warn' if pct >= 75 else '') }}" style="width:{{ pct }}%;"></div></div>
+  <span class="mono" style="font-size:.75rem;white-space:nowrap;">{{ '%.1f'|format(remaining) if remaining is not none else '?' }} ч</span>
+</div>
+{%- endif -%}
+{%- endmacro %}

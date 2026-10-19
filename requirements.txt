@@ -10,3 +10,6 @@ bcrypt==3.2.0
 python-jose[cryptography]==3.3.0
 aiosmtplib==3.0.2
 pandas==2.2.3
+alembic==1.13.2
+apscheduler==3.10.4
+beautifulsoup4==4.12.3
