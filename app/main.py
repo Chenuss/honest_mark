@@ -28,6 +28,7 @@ from app.routers import auth as auth_router
 from app.routers import tickets as tickets_router
 from app.routers import admin as admin_router
 from app.routers import deviations as deviations_router
+from app.routers import crpt_support as crpt_support_router
 
 
 # ──────────────────────────────────────────────
@@ -91,8 +92,41 @@ app.include_router(auth_router.router)
 app.include_router(tickets_router.router)
 app.include_router(admin_router.router)
 app.include_router(deviations_router.router)
+app.include_router(crpt_support_router.router)
 
 logger.info("Приложение запущено")
+
+
+# ──────────────────────────────────────────────
+# Фоновые задачи ТП ЧЗ: парсинг почты support@crpt.ru каждые 5 минут
+# ──────────────────────────────────────────────
+@app.on_event("startup")
+def start_crpt_scheduler():
+    from app import config as app_config
+
+    if not app_config.CRPT_SCHEDULER_ENABLED:
+        logger.info("ТП ЧЗ: планировщик отключён (CRPT_SCHEDULER_ENABLED=false)")
+        return
+    try:
+        from app.services.crpt_email_service import scheduler_factory
+
+        scheduler = scheduler_factory()
+        scheduler.start()
+        app.state.crpt_scheduler = scheduler
+        logger.info(
+            "ТП ЧЗ: планировщик запущен (парсинг IMAP каждые %d мин)",
+            app_config.CRPT_EMAIL_PARSE_INTERVAL_MIN,
+        )
+    except Exception:
+        logger.exception("ТП ЧЗ: не удалось запустить планировщик — раздел работает без автопарсинга")
+
+
+@app.on_event("shutdown")
+def stop_crpt_scheduler():
+    scheduler = getattr(app.state, "crpt_scheduler", None)
+    if scheduler is not None:
+        scheduler.shutdown(wait=False)
+        logger.info("ТП ЧЗ: планировщик остановлен")
 
 
 # ──────────────────────────────────────────────
