@@ -26,6 +26,12 @@
   .tl-out .tl-dot{background:var(--brand-accent);}
   .tl-in .tl-dot{background:var(--brand-info);}
   .mail-card{background:var(--brand-dark);border:1px solid var(--brand-surface-light);border-radius:8px;padding:.9rem 1rem;}
+  /* Тело письма: читаемый текст, перенос длинных строк (URL/GTIN), свёртка больших писем */
+  .mail-body{white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;max-height:14rem;overflow:hidden;position:relative;transition:max-height .2s ease;}
+  .mail-body.expanded,.mail-body.short{max-height:none;}
+  .mail-body:not(.expanded):not(.short)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2.5rem;background:linear-gradient(to bottom,transparent,var(--brand-dark));}
+  .mail-toggle{display:inline-block;margin-top:.35rem;font-size:.78rem;color:var(--brand-accent);cursor:pointer;user-select:none;}
+  .mail-toggle:hover{text-decoration:underline;}
 </style>
 {% endblock %}
 
@@ -103,14 +109,14 @@
     <div style="color:var(--brand-success);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem;font-weight:600;">
       <i class="bi bi-check-circle me-1"></i>Решение от ЦРПТ
     </div>
-    <div style="line-height:1.6;white-space:pre-wrap;font-size:.9rem;">{{ case.result_text }}</div>
+    <div style="line-height:1.6;white-space:pre-wrap;font-size:.9rem;overflow-wrap:break-word;">{{ case.result_text | crpt_display_body }}</div>
   </div>
   {% endif %}
 
   <!-- ══ Текст обращения ══ -->
   <div class="card-dark p-4 mb-3">
     <div class="label-dark" style="margin-bottom:.4rem;">Текст обращения</div>
-    <div style="background:var(--brand-dark);border-radius:8px;padding:1rem;line-height:1.6;white-space:pre-wrap;font-size:.88rem;">{{ case.body_text }}</div>
+    <div style="background:var(--brand-dark);border-radius:8px;padding:1rem;line-height:1.6;white-space:pre-wrap;font-size:.88rem;overflow-wrap:break-word;">{{ case.body_text | crpt_display_body }}</div>
     {% if attachments %}
     <div class="mt-2" style="font-size:.8rem;">
       <span class="label-dark me-2">Вложения:</span>
@@ -178,7 +184,12 @@
           {% if m.parsed_category %}<span class="ms-1">Категория: {{ m.parsed_category }}</span>{% endif %}
           {% if m.parsed_priority %}<span class="ms-1">приоритет: {{ m.parsed_priority }}</span>{% endif %}
         </div>
-        <div class="mail-card" style="font-size:.85rem;white-space:pre-wrap;">{{ (m.body_text or '')[:1200] }}</div>
+        <div class="mail-card">
+          {# Тело письма всегда выводим очищенным: старый сырой HTML/base64 парсится на лету #}
+          {% set body_clean = crpt_display_body(m.body_text) %}
+          <div class="mail-body" style="font-size:.85rem;">{{ body_clean }}</div>
+          <span class="mail-toggle d-none"><i class="bi bi-arrows-expand me-1"></i>Показать полностью</span>
+        </div>
       </div>
       {% else %}
       <div style="color:var(--brand-text-muted);font-size:.85rem;">Писем пока нет — ждём автоответ support@crpt.ru.</div>
@@ -187,4 +198,28 @@
   </div>
 
 </div></div>
+
+<script>
+// Сворачивание длинных писем: если тело не влезает в .mail-body (max-height) — показываем «Показать полностью»
+document.querySelectorAll('.tl-item').forEach(function (item) {
+  var body = item.querySelector('.mail-body');
+  var toggle = item.querySelector('.mail-toggle');
+  if (!body || !toggle) return;
+  function refresh() {
+    var overflowing = body.scrollHeight > body.clientHeight + 4;
+    if (body.classList.contains('expanded')) return;
+    toggle.classList.toggle('d-none', !overflowing && body.scrollHeight <= 600);
+    if (overflowing) body.classList.remove('short');
+  }
+  // короткие письма — без ограничения высоты
+  if (body.scrollHeight <= 230) { body.classList.add('short'); }
+  refresh();
+  toggle.addEventListener('click', function () {
+    var expanded = body.classList.toggle('expanded');
+    toggle.innerHTML = expanded
+      ? '<i class="bi bi-arrows-collapse me-1"></i>Свернуть'
+      : '<i class="bi bi-arrows-expand me-1"></i>Показать полностью';
+  });
+});
+</script>
 {% endblock %}

@@ -16,6 +16,7 @@ app/services/crpt_email_service.py — Отправка/приём писем т
 
 from __future__ import annotations
 
+import base64
 import email as email_lib
 import email.parser
 import email.policy
@@ -50,6 +51,16 @@ from app.utils.work_hours import (
 )
 
 logger = get_logger("crpt_email")
+
+
+def display_body(text: Optional[str], limit: int = 4000) -> str:
+    """Безопасный вывод тела письма в ленте: очищает случайно сохранённый HTML/base64.
+
+    Используется роутами для «исцеления» старых записей, созданных до фикса
+    парсинга (в БД мог лежать сырой HTML или незадекодированная base64-часть).
+    """
+    cleaned, _ = normalize_body(text or "")
+    return cleaned[:limit]
 
 # ──────────────────────────────────────────────
 # Регулярые выражения для парсинга писем ЦРПТ
@@ -235,6 +246,62 @@ def create_crpt_ticket(
 # ──────────────────────────────────────────────
 # Парсинг текста письма
 # ──────────────────────────────────────────────
+_HTML_HINT_RE = re.compile(r"<\s*(html|body|div|p|table|br|span|td)\b", re.IGNORECASE)
+
+
+def looks_like_html(text: str) -> bool:
+    """Признак того, что текст является HTML-разметкой (а не plain text)."""
+    if not text:
+        return False
+    return bool(_HTML_HINT_RE.search(text))
+
+
+def html_to_text(html: str) -> str:
+    """Очистка HTML в читаемый текст: убираем скрипты/стили, теги — в переводы строк."""
+    if not html:
+        return ""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "head", "title", "meta", "link"]):
+        tag.decompose()
+    # Блочные элементы и <br> -> перевод строки, чтобы текст не сливался
+    for tag in soup.find_all(["br", "p", "div", "tr", "li", "table", "h1", "h2", "h3", "h4"]):
+        tag.append("\n")
+    text = soup.get_text(" ", strip=False)
+    # Схлопываем пробелы внутри строк и пустые строки
+    lines = [re.sub(r"[ \t\xa0]+", " ", ln).strip() for ln in text.splitlines()]
+    out, prev_empty = [], True
+    for ln in lines:
+        if ln:
+            out.append(ln)
+            prev_empty = False
+        elif not prev_empty:
+            out.append("")
+            prev_empty = True
+    return "\n".join(out).strip()
+
+
+def normalize_body(text: str) -> tuple[str, bool]:
+    """Вернуть (чистый текст, is_html). Если внутри HTML — распарсить через BeautifulSoup.
+
+    Используется и при сохранении писем, и для «исцеления» старых записей ленты,
+    где когда-то сохранился сырой HTML (в т.ч. base64-части multipart).
+    """
+    if not text:
+        return "", False
+    # base64-«простыня» без пробелов — явный признак незадекодированного MIME
+    if len(text) > 500 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", text[:2000]) and " " not in text[:200]:
+        try:
+            decoded = base64.b64decode(text[:20000] + "===", validate=False)
+            decoded_txt = decoded.decode("utf-8", errors="ignore")
+            if looks_like_html(decoded_txt):
+                return html_to_text(decoded_txt), True
+        except Exception:
+            pass
+    if looks_like_html(text):
+        return html_to_text(text), True
+    return text, False
+
+
 def extract_plain_text(msg) -> str:
     """Извлечь текстовое тело письма (text/plain, иначе HTML через BeautifulSoup)."""
     if msg.is_multipart():
@@ -252,19 +319,20 @@ def extract_plain_text(msg) -> str:
                 if payload:
                     parts_html.append(payload.decode(charset, errors="replace"))
         if parts_plain:
-            return "\n".join(parts_plain)
+            text = "\n".join(parts_plain)
+            # Some mailers send quoted-printable/base64 inside text/plain too
+            cleaned, _ = normalize_body(text)
+            return cleaned or text
         if parts_html:
-            soup = BeautifulSoup("\n".join(parts_html), "html.parser")
-            return soup.get_text("\n", strip=True)
+            return html_to_text("\n".join(parts_html))
         return ""
     payload = msg.get_payload(decode=True)
     if not payload:
         return ""
     charset = msg.get_content_charset() or "utf-8"
     text = payload.decode(charset, errors="replace")
-    if "<html" in text.lower() or "<body" in text.lower():
-        text = BeautifulSoup(text, "html.parser").get_text("\n", strip=True)
-    return text
+    cleaned, _ = normalize_body(text)
+    return cleaned or text
 
 
 def parse_crpt_email_text(text: str) -> dict:
@@ -460,6 +528,7 @@ def process_incoming_message(db: Session, raw_message, received_at: Optional[dat
             from_addr=from_addr,
             subject=subject[:500],
             body_text=body[:8000],
+            body_is_html=looks_like_html(body),
             parsed_sr_number=parsed["sr_number"],
             received_at=received_at or now_msk(),
         )
@@ -477,6 +546,7 @@ def process_incoming_message(db: Session, raw_message, received_at: Optional[dat
         to_addr=config.MARKIROVKA_EMAIL,
         subject=subject,
         body_text=body[:8000],
+        body_is_html=looks_like_html(body),
         parsed_sr_number=parsed["sr_number"],
         parsed_category=parsed["category"],
         parsed_priority=parsed["priority"],
@@ -526,6 +596,11 @@ def rematch_unmatched_emails(db: Session) -> int:
 
         text = (um.subject or "") + "\n" + (um.body_text or "")
         parsed = parse_crpt_email_text(text)
+        # «Исцеление» тела: старые unmatched-письма могли сохраниться сырым HTML/base64
+        clean_body, was_html = normalize_body(um.body_text or "")
+        if was_html and clean_body:
+            um.body_text = clean_body[:8000]
+            um.body_is_html = True
         already = db.query(CrptEmail).filter(CrptEmail.message_id == um.message_id).first()
         if not already:
             db.add(CrptEmail(
@@ -536,6 +611,7 @@ def rematch_unmatched_emails(db: Session) -> int:
                 to_addr=config.MARKIROVKA_EMAIL,
                 subject=um.subject,
                 body_text=(um.body_text or "")[:8000],
+                body_is_html=bool(um.body_is_html),
                 parsed_sr_number=parsed["sr_number"],
                 parsed_category=parsed["category"],
                 parsed_priority=parsed["priority"],
@@ -618,6 +694,32 @@ def parse_raw_email_for_test(db: Session, raw_eml: bytes) -> dict:
 # ──────────────────────────────────────────────
 # Планировщик (APScheduler) — парсинг каждые 5 минут
 # ──────────────────────────────────────────────
+def ensure_crpt_tables() -> None:
+    """Гарантия наличия таблиц ТП ЧЗ (критично для SQLite и старых БД).
+
+    Проект исторически инициализируется через init_db.py / alembic; если
+    миграция b2crpt002 не была применена (или приложение запущено на новой
+    базе), фоновые задачи падали с «Table ... doesn't exist». Создаём
+    недостающие таблицы идемпотентно перед первым обращением к ним.
+    """
+    try:
+        from app.database import Base, engine
+        import app.models  # noqa: F401 — регистрирует модели в Base.metadata
+
+        tables = [
+            CrptSupportCase.__table__,
+            CrptEmail.__table__,
+            CrptUnmatchedEmail.__table__,
+        ]
+        # create_all(sort_on_dependent_tables=True) может молча пропустить
+        # таблицу из-за FK на несуществующую (в списке) таблицу — создаём
+        # каждую отдельно; checkfirst делает операцию идемпотентной.
+        for t in tables:
+            Base.metadata.create_all(bind=engine, tables=[t], checkfirst=True)
+    except Exception:
+        logger.exception("Не удалось гарантировать наличие таблиц ТП ЧЗ")
+
+
 def scheduler_factory():
     """
     Фабрика фоновых задач ТП ЧЗ для APScheduler BackgroundScheduler.
@@ -628,6 +730,7 @@ def scheduler_factory():
     from app.database import SessionLocal
 
     def job_parse_inbox():
+        ensure_crpt_tables()
         db = SessionLocal()
         try:
             fetch_and_process_inbox(db)

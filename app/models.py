@@ -15,6 +15,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum,
@@ -327,6 +328,7 @@ class CrptEmail(Base):
     to_addr = Column(String(300), nullable=True)
     subject = Column(String(500), nullable=True)
     body_text = Column(Text, nullable=True)
+    body_is_html = Column(Boolean, nullable=False, default=False)  # тело — HTML (требует очистки при показе)
 
     parsed_sr_number = Column(String(50), nullable=True)
     parsed_category = Column(String(200), nullable=True)     # Категория: ЗНО…
@@ -354,6 +356,7 @@ class CrptUnmatchedEmail(Base):
     from_addr = Column(String(300), nullable=True)
     subject = Column(String(500), nullable=True)          # декодированный RFC2047
     body_text = Column(Text, nullable=True)
+    body_is_html = Column(Boolean, nullable=False, default=False)
     parsed_sr_number = Column(String(50), nullable=True)
     received_at = Column(DateTime, nullable=False, server_default=func.now(), index=True)
     matched_case_id = Column(Integer, ForeignKey("crpt_support_cases.id", ondelete="SET NULL"), nullable=True)
