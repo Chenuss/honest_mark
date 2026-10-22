@@ -246,7 +246,37 @@ def create_crpt_ticket(
 # ──────────────────────────────────────────────
 # Парсинг текста письма
 # ──────────────────────────────────────────────
-_HTML_HINT_RE = re.compile(r"<\s*(html|body|div|p|table|br|span|td)\b", re.IGNORECASE)
+_HTML_HINT_RE = re.compile(
+    r"<\s*(html|body|div|p|table|br|span|td|img|a|b|i|u|h[1-6]|ul|ol|li|tr|th)\b",
+    re.IGNORECASE,
+)
+# <img ... src="data:image/...;base64,...."> — картинка, «зашитая» прямо в тело письма.
+# В ленте сообщений показывать её нечего (обрывок base64-простыни), поэтому теги вырезаются.
+_IMG_TAG_RE = re.compile(r"<img\b.*?>", re.IGNORECASE | re.DOTALL)
+
+
+def strip_image_tags(text: str) -> str:
+    """Вырезать из текста все <img>-теги, включая data:image;base64 и их обрывки.
+
+    Обрабатывает три ситуации:
+      • полный тег:  <img width="422" src="data:image/jpeg;base64,...">
+      • без кавычек: <img src=data:image/png;base64,AAAA>
+      • обрезанный по лимиту длины хвост: <img ... src="data:image/jpeg;base64,iVBOR…
+        (до конца текста нет `>` — считаем остаток картинкой и отрезаем его).
+    """
+    if not text or "<img" not in text.lower():
+        return text
+    cleaned = _IMG_TAG_RE.sub("", text)
+    # Остался незакрытый обрывок <img … (без `>` до конца текста) — убираем его целиком.
+    low = cleaned.lower()
+    idx = low.find("<img")
+    while idx != -1:
+        end = cleaned.find(">", idx)
+        if end == -1:
+            cleaned = cleaned[:idx].rstrip()
+            break
+        idx = low.find("<img", end + 1)
+    return cleaned
 
 
 def looks_like_html(text: str) -> bool:
@@ -257,12 +287,15 @@ def looks_like_html(text: str) -> bool:
 
 
 def html_to_text(html: str) -> str:
-    """Очистка HTML в читаемый текст: убираем скрипты/стили, теги — в переводы строк."""
+    """Очистка HTML в читаемый текст: убираем скрипты/стили/картинки, теги — в переводы строк."""
     if not html:
         return ""
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "head", "title", "meta", "link"]):
         tag.decompose()
+    # Изображения (логотипы, подписи, base64-картинки) в текстовой ленте не нужны.
+    for img in soup.find_all("img"):
+        img.decompose()
     # Блочные элементы и <br> -> перевод строки, чтобы текст не сливался
     for tag in soup.find_all(["br", "p", "div", "tr", "li", "table", "h1", "h2", "h3", "h4"]):
         tag.append("\n")
@@ -285,6 +318,7 @@ def normalize_body(text: str) -> tuple[str, bool]:
 
     Используется и при сохранении писем, и для «исцеления» старых записей ленты,
     где когда-то сохранился сырой HTML (в т.ч. base64-части multipart).
+    Изображения (<img>, в т.ч. data:image;base64) из текста вырезаются.
     """
     if not text:
         return "", False
@@ -297,27 +331,52 @@ def normalize_body(text: str) -> tuple[str, bool]:
                 return html_to_text(decoded_txt), True
         except Exception:
             pass
-    if looks_like_html(text):
-        return html_to_text(text), True
+    # Обрывки/теги картинок вырезаем до определения типа тела: иначе незакрытый
+    # <img …> будет «съедать» весь последующий текст при разборе HTML.
+    stripped = strip_image_tags(text)
+    was_stripped = stripped != text
+    if looks_like_html(stripped):
+        return html_to_text(stripped), True
+    if was_stripped:
+        return stripped.strip(), False
     return text, False
 
 
+def _is_textual_part(part) -> bool:
+    """Текстовая часть письма (не вложение/картинка)."""
+    ctype = part.get_content_type()
+    if ctype not in ("text/plain", "text/html"):
+        return False
+    disposition = str(part.get("Content-Disposition", "")).lower()
+    filename = part.get_filename()
+    if "attachment" in disposition or "inline" in disposition:
+        return False
+    if filename:  # текстовое «вложение» (например .txt приложенное) в ленту не берём
+        return False
+    return True
+
+
 def extract_plain_text(msg) -> str:
-    """Извлечь текстовое тело письма (text/plain, иначе HTML через BeautifulSoup)."""
+    """Извлечь текстовое тело письма (text/plain, иначе HTML через BeautifulSoup).
+
+    Вложения и inline-картинки (image/*, application/*, части с Content-Disposition)
+    в текст не попадают — в ленте отображаем только читаемый текст.
+    """
     if msg.is_multipart():
         parts_plain, parts_html = [], []
         for part in msg.walk():
+            if not _is_textual_part(part):
+                continue
             ctype = part.get_content_type()
-            if ctype == "text/plain" and "attachment" not in str(part.get("Content-Disposition", "")):
-                payload = part.get_payload(decode=True)
-                charset = part.get_content_charset() or "utf-8"
-                if payload:
-                    parts_plain.append(payload.decode(charset, errors="replace"))
-            elif ctype == "text/html":
-                payload = part.get_payload(decode=True)
-                charset = part.get_content_charset() or "utf-8"
-                if payload:
-                    parts_html.append(payload.decode(charset, errors="replace"))
+            payload = part.get_payload(decode=True)
+            charset = part.get_content_charset() or "utf-8"
+            if not payload:
+                continue
+            decoded = payload.decode(charset, errors="replace")
+            if ctype == "text/plain":
+                parts_plain.append(decoded)
+            else:
+                parts_html.append(decoded)
         if parts_plain:
             text = "\n".join(parts_plain)
             # Some mailers send quoted-printable/base64 inside text/plain too
