@@ -186,7 +186,7 @@
         </div>
         <div class="mail-card">
           {# Тело письма всегда выводим очищенным: старый сырой HTML/base64 парсится на лету #}
-          {% set body_clean = m.body_text | display_body %}
+          {% set body_clean = m.body_text | crpt_display_body %}
           <div class="mail-body" style="font-size:.85rem;">{{ body_clean }}</div>
           <span class="mail-toggle d-none"><i class="bi bi-arrows-expand me-1"></i>Показать полностью</span>
         </div>
