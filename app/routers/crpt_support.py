@@ -38,6 +38,8 @@ logger = get_logger("crpt_support")
 
 router = APIRouter(tags=["crpt-support"])
 templates = Jinja2Templates(directory="app/templates")
+# Фильтр для ленты переписки: автоочистка HTML/base64 в телах писем
+templates.env.filters["crpt_display_body"] = crpt_email_service.display_body
 
 UPLOAD_DIR = Path("app/static/uploads/crpt")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -212,9 +214,20 @@ def crpt_case_detail(
 ):
     case = _get_case_by_sr(db, sr_number)
     vm = _case_viewmodel(case)
-    db.commit()
 
     timeline: list[CrptEmail] = sorted(case.emails, key=lambda e: e.received_at)
+
+    # «Исцеление» старых записей: если в ленте сохранился сырой HTML/base64
+    # (письма, принятые до фикса парсинга) — очищаем и сохраняем обратно.
+    healed = False
+    for m in timeline:
+        cleaned, was_html = crpt_email_service.normalize_body(m.body_text or "")
+        if was_html and cleaned and cleaned != (m.body_text or ""):
+            m.body_text = cleaned[:8000]
+            m.body_is_html = True
+            healed = True
+    if healed:
+        db.commit()
 
     return templates.TemplateResponse("crpt_support/detail.html", {
         "request": request,

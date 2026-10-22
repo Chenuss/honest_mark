@@ -60,6 +60,10 @@ def migrate() -> None:
         if _table_exists(conn, "crpt_emails") and not _col_exists(conn, "crpt_emails", "message_id"):
             print("  + crpt_emails.message_id")
             conn.execute(text("ALTER TABLE crpt_emails ADD COLUMN message_id VARCHAR(500) NULL"))
+        for _t in ("crpt_emails", "crpt_unmatched_emails"):
+            if _table_exists(conn, _t) and not _col_exists(conn, _t, "body_is_html"):
+                print(f"  + {_t}.body_is_html")
+                conn.execute(text(f"ALTER TABLE {_t} ADD COLUMN body_is_html TINYINT(1) NOT NULL DEFAULT 0"))
 
         # users.full_name
         if _table_exists(conn, "users") and not _col_exists(conn, "users", "full_name"):
