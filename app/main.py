@@ -108,7 +108,11 @@ def start_crpt_scheduler():
         logger.info("ТП ЧЗ: планировщик отключён (CRPT_SCHEDULER_ENABLED=false)")
         return
     try:
-        from app.services.crpt_email_service import scheduler_factory
+        from app.services.crpt_email_service import ensure_crpt_tables, scheduler_factory
+
+        # Гарантируем наличие таблиц ТП ЧЗ даже если миграция alembic
+        # (a1crpt001 / b2crpt002) ещё не применялась к этой базе.
+        ensure_crpt_tables()
 
         scheduler = scheduler_factory()
         scheduler.start()

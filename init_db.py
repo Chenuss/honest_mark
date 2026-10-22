@@ -52,6 +52,15 @@ def migrate() -> None:
     print("Проверяю миграции...")
     with engine.connect() as conn:
 
+        # ── ТП ЧЗ: недостающие колонки (если alembic не применялся;
+        #    таблицы создаёт create_all выше / миграции a1crpt001+b2crpt002) ──
+        if _table_exists(conn, "crpt_support_cases") and not _col_exists(conn, "crpt_support_cases", "email_thread_id"):
+            print("  + crpt_support_cases.email_thread_id")
+            conn.execute(text("ALTER TABLE crpt_support_cases ADD COLUMN email_thread_id VARCHAR(500) NULL"))
+        if _table_exists(conn, "crpt_emails") and not _col_exists(conn, "crpt_emails", "message_id"):
+            print("  + crpt_emails.message_id")
+            conn.execute(text("ALTER TABLE crpt_emails ADD COLUMN message_id VARCHAR(500) NULL"))
+
         # users.full_name
         if _table_exists(conn, "users") and not _col_exists(conn, "users", "full_name"):
             print("  + users.full_name")

@@ -618,6 +618,32 @@ def parse_raw_email_for_test(db: Session, raw_eml: bytes) -> dict:
 # ──────────────────────────────────────────────
 # Планировщик (APScheduler) — парсинг каждые 5 минут
 # ──────────────────────────────────────────────
+def ensure_crpt_tables() -> None:
+    """Гарантия наличия таблиц ТП ЧЗ (критично для SQLite и старых БД).
+
+    Проект исторически инициализируется через init_db.py / alembic; если
+    миграция b2crpt002 не была применена (или приложение запущено на новой
+    базе), фоновые задачи падали с «Table ... doesn't exist». Создаём
+    недостающие таблицы идемпотентно перед первым обращением к ним.
+    """
+    try:
+        from app.database import Base, engine
+        import app.models  # noqa: F401 — регистрирует модели в Base.metadata
+
+        tables = [
+            CrptSupportCase.__table__,
+            CrptEmail.__table__,
+            CrptUnmatchedEmail.__table__,
+        ]
+        # create_all(sort_on_dependent_tables=True) может молча пропустить
+        # таблицу из-за FK на несуществующую (в списке) таблицу — создаём
+        # каждую отдельно; checkfirst делает операцию идемпотентной.
+        for t in tables:
+            Base.metadata.create_all(bind=engine, tables=[t], checkfirst=True)
+    except Exception:
+        logger.exception("Не удалось гарантировать наличие таблиц ТП ЧЗ")
+
+
 def scheduler_factory():
     """
     Фабрика фоновых задач ТП ЧЗ для APScheduler BackgroundScheduler.
@@ -628,6 +654,7 @@ def scheduler_factory():
     from app.database import SessionLocal
 
     def job_parse_inbox():
+        ensure_crpt_tables()
         db = SessionLocal()
         try:
             fetch_and_process_inbox(db)
