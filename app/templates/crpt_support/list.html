@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% import "crpt_support/macros.html" as cz %}
+{% block title %}ТП ЧЗ — Обращения в поддержку ЦРПТ{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cz-badge{display:inline-block;padding:.25em .6em;border-radius:5px;font-size:.72rem;font-weight:700;
+            font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.03em;}
+  .cz-b-new{background:var(--brand-info);color:#fff}
+  .cz-b-waitnum{background:#6366f1;color:#fff}
+  .cz-b-progress{background:var(--brand-warning);color:#000}
+  .cz-b-clarify{background:var(--brand-danger);color:#fff;animation:czblink 1.2s ease-in-out infinite}
+  .cz-b-resolved{background:var(--brand-success);color:#000}
+  .cz-b-closed{background:var(--brand-text-muted);color:#000}
+  .cz-b-overdue{background:#dc2626;color:#fff;box-shadow:0 0 8px rgba(239,68,68,.6)}
+  @keyframes czblink{0%,100%{opacity:1}50%{opacity:.35}}
+  .cz-progress{background:var(--brand-dark);border:1px solid var(--brand-surface-light);
+               border-radius:4px;height:10px;width:110px;overflow:hidden;flex-shrink:0}
+  .cz-progress-fill{height:100%;background:var(--brand-accent);border-radius:3px;transition:width .3s}
+  .cz-pf-warn{background:var(--brand-warning)}
+  .cz-pf-danger{background:var(--brand-danger)}
+  .cz-table{width:100%;border-collapse:collapse;font-size:.86rem}
+  .cz-table th{color:var(--brand-text-muted);font-size:.72rem;text-transform:uppercase;
+               letter-spacing:.05em;padding:.6rem .8rem;border-bottom:2px solid var(--brand-surface-light);text-align:left}
+  .cz-table td{padding:.7rem .8rem;border-bottom:1px solid var(--brand-surface-light);vertical-align:middle}
+  .cz-table tr:hover td{background:var(--brand-surface-light)}
+  .cz-attention{border-left:3px solid var(--brand-danger);background:rgba(239,68,68,.07)}
+  .btn-accent{background:var(--brand-accent);color:var(--brand-dark);font-weight:700;border:none;border-radius:6px}
+  .btn-accent:hover{background:var(--brand-accent-hover);color:var(--brand-dark)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mt-4 mb-3 flex-wrap gap-2">
+  <div>
+    <h4 style="font-weight:700;margin:0;"><i class="bi bi-headset me-2" style="color:var(--brand-accent);"></i>Работа с ТП Честного Знака</h4>
+    <div style="font-size:.83rem;color:var(--brand-text-muted);">Обращения в техподдержку ЦРПТ (support@crpt.ru) с ящика markirovka@belor.ru</div>
+  </div>
+  <a href="/crpt-support/create" class="btn btn-accent"><i class="bi bi-plus-lg me-1"></i>Новое обращение</a>
+</div>
+
+{% if request.query_params.get('created') %}
+<div class="card-dark p-3 mb-3" style="border-left:3px solid var(--brand-success);font-size:.88rem;">
+  <i class="bi bi-check-circle me-1" style="color:var(--brand-success);"></i>
+  Обращение отправлено в ТП ЦРПТ. Статус <strong>«Ждём номер SR»</strong> — автоответ обычно приходит в течение нескольких минут.
+</div>
+{% endif %}
+
+<!-- ══ Требуют действия ══ -->
+{% if attention %}
+<div class="card-dark p-3 mb-3 cz-attention">
+  <div style="color:var(--brand-danger);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.6rem;">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>Требуют действия
+  </div>
+  {% for vm in attention %}
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2" style="padding:.35rem 0;border-top:1px solid var(--brand-surface-light);">
+    <div style="font-size:.85rem;">
+      <a href="/crpt-support/{{ vm.case.sr_number }}" class="mono" style="color:var(--brand-accent);text-decoration:none;font-weight:600;">{{ vm.case.sr_number or 'без номера' }}</a>
+      &middot; {{ vm.case.subject[:70] }}
+    </div>
+    <div style="font-size:.8rem;">
+      {% if vm.auto_close_remaining_h is not none %}
+        <span class="cz-badge cz-b-clarify">Автозакрытие через {{ '%.0f'|format(vm.auto_close_remaining_h) }} ч</span>
+      {% elif vm.overdue %}
+        <span class="cz-badge cz-b-overdue">Просрочен регламент 48ч</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ══ Фильтры ══ -->
+<div class="card-dark p-3 mb-3">
+  <form method="get" action="/crpt-support" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="label-dark">Статус</label>
+      <select name="status" class="form-select form-select-sm form-dark">
+        <option value="">Все</option>
+        {% for s in all_statuses %}
+        <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="overdue" value="1" id="fOverdue" {% if filter_overdue == '1' %}checked{% endif %}>
+        <label class="form-check-label" for="fOverdue" style="font-size:.85rem;">Только просроченные</label>
+      </div>
+    </div>
+    <div class="col-auto">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="needs_action" value="1" id="fAction" {% if filter_needs_action == '1' %}checked{% endif %}>
+        <label class="form-check-label" for="fAction" style="font-size:.85rem;">Ждут уточнения</label>
+      </div>
+    </div>
+    <div class="col-auto"><button class="btn btn-sm btn-accent" type="submit">Применить</button></div>
+    <div class="col-auto"><a href="/crpt-support" class="btn btn-sm btn-outline-secondary" style="font-size:.8rem;">Сброс</a></div>
+  </form>
+</div>
+
+<!-- ══ Таблица кейсов ══ -->
+<div class="card-dark p-0 overflow-hidden">
+  <table class="cz-table">
+    <thead>
+      <tr>
+        <th>SR</th><th>Дата</th><th>GTIN / Ошибка</th><th>Тема</th>
+        <th>Статус</th><th>Осталось 48ч</th><th>Авто-закрытие</th><th>Результат</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for vm in rows %}
+      <tr>
+        <td>
+          {% if vm.case.sr_number %}
+          <a href="/crpt-support/{{ vm.case.sr_number }}" class="mono"
+             style="color:var(--brand-accent);text-decoration:none;font-weight:600;">{{ vm.case.sr_number }}</a>
+          {% else %}<span class="mono" style="color:var(--brand-text-muted);">#{{ vm.case.id }} (нет SR)</span>{% endif %}
+        </td>
+        <td style="white-space:nowrap;">{{ vm.case.created_at.strftime('%d.%m.%Y') if vm.case.created_at else '—' }}</td>
+        <td>
+          <div class="mono" style="font-size:.78rem;">{{ vm.case.gtin or '—' }}</div>
+          {% if vm.case.error_code %}<span class="cz-badge cz-b-overdue" style="font-size:.65rem;background:#7c3aed;">{{ vm.case.error_code }}</span>{% endif %}
+        </td>
+        <td style="max-width:260px;">
+          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ vm.case.subject }}">{{ vm.case.subject }}</div>
+        </td>
+        <td>{{ cz.status_badge(vm.case.status) }}</td>
+        <td>{{ cz.progress_bar(vm.progress, vm.remaining_hours) }}</td>
+        <td style="font-size:.78rem;white-space:nowrap;">
+          {% if vm.auto_close_remaining_h is not none %}
+            {% if vm.auto_close_remaining_h < 24 %}
+              <span style="color:var(--brand-danger);font-weight:700;">через {{ '%.0f'|format(vm.auto_close_remaining_h) }} ч</span>
+            {% else %}
+              до {{ vm.case.auto_close_deadline_3d.strftime('%d.%m %H:%M') }}
+            {% endif %}
+          {% else %}<span style="color:var(--brand-text-muted);">—</span>{% endif %}
+        </td>
+        <td style="max-width:200px;font-size:.78rem;">
+          {% if vm.case.result_text %}<span style="color:var(--brand-success);"><i class="bi bi-check2-circle me-1"></i>{{ vm.case.result_text[:60] }}</span>
+          {% elif vm.overdue %}<span style="color:var(--brand-danger);">просрочен</span>
+          {% else %}<span style="color:var(--brand-text-muted);">—</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-center py-5" style="color:var(--brand-text-muted);">
+        <i class="bi bi-inbox fs-3 d-block mb-2"></i>Обращений пока нет. Создайте первое — кнопка «Новое обращение».
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
