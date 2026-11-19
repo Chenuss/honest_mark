@@ -287,11 +287,15 @@ class CrptSupportCase(Base):
     resumed_at = Column(DateTime, nullable=True)            # ответили ЦРПТ — таймер возобновлён
     auto_close_deadline_3d = Column(DateTime, nullable=True)  # автозакрытие через 3 рабочих дня
     remaining_work_hours = Column(Float, nullable=True)     # кэш остатка раб. часов (обновляется парсером)
+    resolved_at = Column(DateTime, nullable=True)           # когда кейс перешёл в RESOLVED
+    closed_at = Column(DateTime, nullable=True)             # когда кейс перешёл в CLOSED
 
     attachments_json = Column(Text, nullable=True)          # список приложенных файлов (JSON)
     email_thread_id = Column(String(255), nullable=True, index=True)
     last_crpt_email_body = Column(Text, nullable=True)      # последнее письмо от support@crpt.ru
     result_text = Column(Text, nullable=True)               # текст решения от ЦРПТ
+    reopen_reason = Column(Text, nullable=True)             # причина переоткрытия (решение не устраивает)
+    reopened_at = Column(DateTime, nullable=True)           # когда кейс был переоткрыт админом
 
     related_internal_ticket_id = Column(
         Integer, ForeignKey("tickets.id", ondelete="SET NULL"), nullable=True, index=True,

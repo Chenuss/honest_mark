@@ -180,8 +180,32 @@ def get_remaining_work_hours(case) -> Optional[float]:
         anchor = case.paused_at or now_msk()
         return count_work_hours_between(anchor, _to_msk(case.deadline_48h))
 
-    # IN_PROGRESS / OVERDUE / прочие — живой отсчёт
-    return count_work_hours_between(now_msk(), _to_msk(case.deadline_48h))
+    # IN_PROGRESS / OVERDUE / прочие — живой отсчёт.
+    # Паузы (ожидание уточнения) из вычитаемого интервала исключаем:
+    # • незавершённая пауза: paused_at позже resumed_at — таймер стоит сейчас;
+    # • завершённые паузы: [resumed_at_prev..paused_at] — время ожидания ответа ЦРПТ.
+    remaining = count_work_hours_between(now_msk(), _to_msk(case.deadline_48h))
+    paused_at = getattr(case, "paused_at", None)
+    resumed_at = getattr(case, "resumed_at", None)
+    if paused_at is not None and (resumed_at is None or paused_at >= resumed_at):
+        remaining += count_work_hours_between(now_msk(), _to_msk(paused_at))
+    if resumed_at is not None:
+        prev_pause = db_pause_before_resume(case, resumed_at)
+        if prev_pause is not None:
+            remaining -= count_work_hours_between(_to_msk(prev_pause), _to_msk(resumed_at))
+    return remaining
+
+
+def db_pause_before_resume(case, resumed_at: datetime):
+    """Найти paused_at соответствующей завершённой паузы (до resumed_at).
+
+    Идеально — история пауз; в текущей модели хранится только последняя пара
+    paused_at/resumed_at, поэтому используем paused_at, если он предшествует resumed_at.
+    """
+    paused_at = getattr(case, "paused_at", None)
+    if paused_at is not None and _to_msk(paused_at) <= _to_msk(resumed_at):
+        return paused_at
+    return None
 
 
 def is_overdue(case) -> bool:

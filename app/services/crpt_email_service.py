@@ -45,6 +45,7 @@ from app.models import CrptEmail, CrptSupportCase, CrptCaseStatus, CrptUnmatched
 from app.utils.work_hours import (
     add_work_days,
     add_work_hours,
+    count_work_hours_between,
     get_remaining_work_hours,
     is_overdue,
     now_msk,
@@ -174,6 +175,50 @@ def send_crpt_email(
 
     logger.info("Письмо в ТП ЦРПТ отправлено: %r -> %s (%d вложений)", subject, to_email, len(attachments_meta))
     return {"sent": True, "message_id": message_id, "attachments": attachments_meta}
+
+
+def build_new_email_preview(
+    subject: str,
+    body: str,
+    enterprise: Optional[str] = None,
+    inn: Optional[str] = None,
+    files: Optional[Iterable] = None,
+) -> dict:
+    """Собрать письмо в ТП ЧЗ БЕЗ отправки — для предпросмотра и редактирования.
+
+    Возвращает dict:
+      {from, to, subject, header, body (текст пользователя), full_body (полное тело),
+       attachments: [{name,size}], warnings: [...]}
+    """
+    enterprise = enterprise or config.ENTERPRISE_DEFAULTS["enterprise_name"]
+    inn = inn or config.ENTERPRISE_DEFAULTS["inn"]
+    full_body = build_email_body(enterprise, inn, body)
+
+    attachments_meta = []
+    warnings: list[str] = []
+    for item in files or []:
+        if isinstance(item, tuple):
+            fname, payload = item
+        else:
+            p = Path(item)
+            fname, payload = p.name, p.stat().st_size if p.exists() else 0
+        attachments_meta.append({"name": fname, "size": int(payload)})
+
+    if not (config.CRPT_SMTP_HOST and config.CRPT_SMTP_PASSWORD):
+        warnings.append(
+            "SMTP ЦРПТ не настроен (CRPT_SMTP_HOST/CRPT_SMTP_PASSWORD) — письмо НЕ будет отправлено"
+        )
+
+    return {
+        "from": config.CRPT_SMTP_USER or config.MARKIROVKA_EMAIL,
+        "to": config.CRPT_SUPPORT_EMAIL,
+        "subject": subject,
+        "header": build_email_body(enterprise, inn, "").rstrip("-\n ").rstrip(),
+        "body": body,
+        "full_body": full_body,
+        "attachments": attachments_meta,
+        "warnings": warnings,
+    }
 
 
 def create_crpt_ticket(
@@ -777,6 +822,156 @@ def ensure_crpt_tables() -> None:
             Base.metadata.create_all(bind=engine, tables=[t], checkfirst=True)
     except Exception:
         logger.exception("Не удалось гарантировать наличие таблиц ТП ЧЗ")
+
+
+# ──────────────────────────────────────────────
+# Управление статусами кейса вручную (роль admin)
+# ──────────────────────────────────────────────
+def set_case_status(
+    db: Session,
+    case: CrptSupportCase,
+    new_status: CrptCaseStatus,
+    reason: Optional[str] = None,
+) -> str:
+    """Сменить статус кейса вручную. Возвращает текст уведомления для UI.
+
+    Особый случай — переоткрытие (RESOLVED/CLOSED -> IN_PROGRESS): решение
+    ЦРПТ нас не устраивает. Тогда:
+      • причина переоткрытия сохраняется в case.reopen_reason, ставим reopened_at;
+      • результат ЦРПТ (result_text) переносится в ленту переписки как событие
+        'reopened' — история решения не теряется; result_text обнуляется;
+      • отсчёт 48 раб. часов возобновляется: дедлайн продлевается на время,
+        проведённое кейсом в RESOLVED/CLOSED (в рабочих часах).
+    """
+    now = now_msk()
+    old = case.status
+
+    if new_status == old:
+        return "Статус не изменён (совпадает с текущим)."
+
+    # ── Переоткрытие обращения ──
+    if new_status == CrptCaseStatus.IN_PROGRESS and old in (
+        CrptCaseStatus.RESOLVED,
+        CrptCaseStatus.CLOSED,
+    ):
+        case.reopen_reason = (reason or "").strip()[:6000] or None
+        case.reopened_at = now
+        if case.result_text:
+            db.add(CrptEmail(
+                case_id=case.id,
+                direction=CrptEmail.DIRECTION_IN,
+                message_id=None,
+                from_addr=config.CRPT_SUPPORT_EMAIL,
+                to_addr=config.MARKIROVKA_EMAIL,
+                subject=(f"{case.sr_number or ''} Решение ЦРПТ (зафиксировано до переоткрытия)").strip(),
+                body_text=case.result_text[:8000],
+                event_type="reopened",
+                received_at=now,
+            ))
+        case.result_text = None
+        # Продление регламента: сколько кейс «отлежался» в решённом/закрытом —
+        # настолько же сдвигаем дедлайн 48ч (в рабочих часах).
+        finished_at = getattr(case, "resolved_at", None) or getattr(case, "closed_at", None) or now
+        idle_hours = count_work_hours_between(finished_at, now)
+        if case.deadline_48h is not None and idle_hours > 0:
+            case.deadline_48h = add_work_hours(case.deadline_48h, idle_hours)
+        case.paused_at = None
+        case.resumed_at = now
+        case.status = CrptCaseStatus.IN_PROGRESS
+        remaining = get_remaining_work_hours(case)
+        if remaining is not None:
+            case.remaining_work_hours = remaining
+        db.commit()
+        logger.info("Кейс %s переоткрыт (было %s), дедлайн продлён на %.1f раб. ч",
+                    case.sr_number, old.value, idle_hours)
+        return f"Обращение переоткрыто из статуса «{old.value}», отсчёт 48 ч возобновлён."
+
+    # ── Обычная смена статуса ──
+    case.status = new_status
+    if new_status == CrptCaseStatus.RESOLVED:
+        case.resolved_at = now
+    if new_status == CrptCaseStatus.CLOSED:
+        case.closed_at = now
+        case.paused_at = None
+    if new_status == CrptCaseStatus.WAITING_CLARIFICATION and case.auto_close_deadline_3d is None:
+        case.paused_at = now
+        case.auto_close_deadline_3d = add_work_days(now, config.CRPT_AUTO_CLOSE_WORK_DAYS)
+    remaining = get_remaining_work_hours(case)
+    if remaining is not None:
+        case.remaining_work_hours = remaining
+    db.commit()
+    logger.info("Кейс %s: статус изменён вручную %s -> %s", case.sr_number, old.value, new_status.value)
+    return f"Статус изменён: {old.value} → {new_status.value}."
+
+
+def build_reopen_email_preview(case: CrptSupportCase, reason: str) -> dict:
+    """Предпросмотр письма-возражения при переоткрытии (без отправки)."""
+    sr = case.sr_number or f"#{case.id}"
+    subject = f"{sr}. Не согласны с решением, прошу возобновить работу ({case.enterprise_name})"
+    body = (
+        "Здравствуйте!\n\n"
+        f"По обращению {sr} получено решение:\n"
+        "---\n" + (case.result_text or "—").strip() + "\n---\n\n"
+        "Данное решение нас не устраивает. Основание для переоткрытия обращения:\n"
+        + (reason or "").strip() + "\n\n"
+        f"Прошу возобновить работу по обращению {sr}.\n\n"
+        f"Предприятие: {case.enterprise_name}\n"
+        f"ИНН: {case.inn}\n"
+        f"Контактный ящик: {config.MARKIROVKA_EMAIL}\n"
+    )
+    return {"subject": subject, "body": body, "to": config.CRPT_SUPPORT_EMAIL}
+
+
+def reopen_with_objection(
+    db: Session,
+    case: CrptSupportCase,
+    reason: str,
+    files: Optional[Iterable] = None,
+    send_email: bool = True,
+    custom_body: Optional[str] = None,
+    custom_subject: Optional[str] = None,
+) -> dict:
+    """Переоткрыть обращение и отправить в ТП ЦРПТ письмо-возражение.
+
+    Текст письма может быть отредактирован пользователем после предпросмотра
+    (custom_body/custom_subject). Если SMTP не настроен — письмо НЕ уходит,
+    но статус меняется и событие остаётся в ленте (sent=False).
+    """
+    preview = build_reopen_email_preview(case, reason)
+    subject = (custom_subject or "").strip() or preview["subject"]
+    body = (custom_body or "").strip() or preview["body"]
+
+    email_result = None
+    if send_email:
+        last_in = (
+            db.query(CrptEmail)
+            .filter(CrptEmail.case_id == case.id, CrptEmail.direction == CrptEmail.DIRECTION_IN)
+            .order_by(CrptEmail.received_at.desc())
+            .first()
+        )
+        email_result = send_crpt_email(
+            subject=subject,
+            body=body,
+            files=list(files or []),
+            in_reply_to=(last_in.message_id or case.email_thread_id) if last_in else case.email_thread_id,
+        )
+        db.add(CrptEmail(
+            case_id=case.id,
+            direction=CrptEmail.DIRECTION_OUT,
+            message_id=email_result.get("message_id") or None,
+            from_addr=config.MARKIROVKA_EMAIL,
+            to_addr=config.CRPT_SUPPORT_EMAIL,
+            subject=subject[:500],
+            body_text=body[:8000],
+            event_type="reopen_sent",
+            received_at=now_msk(),
+        ))
+    set_case_status(db, case, CrptCaseStatus.IN_PROGRESS, reason=reason)
+    return {
+        "email_sent": bool(email_result and email_result.get("sent")),
+        "email_result": email_result,
+        "preview": preview,
+    }
 
 
 def scheduler_factory():

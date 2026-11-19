@@ -62,6 +62,32 @@ def _case_viewmodel(case: CrptSupportCase) -> dict:
     }
 
 
+def _preview_attachments_html(files: list) -> str:
+    """HTML превью вложений (картинки inline, прочие — плашкой)."""
+    import base64 as b64
+    from pathlib import Path
+
+    parts = []
+    for f in files or []:
+        p = Path(f) if not isinstance(f, tuple) else None
+        name, data = (p.name, p.read_bytes()) if p else f
+        suffix = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        size = len(data)
+        if suffix in ("png", "jpg", "jpeg", "gif", "webp") and size < 3_000_000:
+            uri = f"data:image/{'jpeg' if suffix in ('jpg','jpeg') else suffix};base64," + b64.b64encode(data).decode()
+            parts.append(
+                f'<div class="mb-2"><img src="{uri}" alt="{name}" '
+                f'style="max-width:100%;max-height:320px;border-radius:8px;border:1px solid var(--brand-surface-light);">'
+                f'<div style="font-size:.75rem;color:var(--brand-text-muted);" class="mt-1">{name} · {size//1024} КБ</div></div>'
+            )
+        else:
+            parts.append(
+                f'<span class="badge bg-secondary me-1 mono" title="{size} байт">'
+                f'<i class="bi bi-paperclip me-1"></i>{name}</span>'
+            )
+    return "".join(parts)
+
+
 def _load_attachments(case: CrptSupportCase) -> list[dict]:
     try:
         return json.loads(case.attachments_json or "[]")
@@ -200,6 +226,116 @@ async def crpt_case_create(
 
     # До присвоения SR номера ссылка ведёт на create-form с уведомлением
     return RedirectResponse(url="/crpt-support?created=1", status_code=303)
+
+
+# ──────────────────────────────────────────────
+# Предпросмотр письма в ТП ЧЗ (до отправки)
+# ──────────────────────────────────────────────
+_PREVIEW_STATE_KEY = "crpt_email_preview"
+
+
+@router.post("/crpt-support/preview", response_class=HTMLResponse)
+async def crpt_email_preview(
+    request: Request,
+    subject: str = Form(...),
+    body: str = Form(...),
+    enterprise: str = Form(default=""),
+    inn: str = Form(default=""),
+    gtin: str = Form(default=""),
+    error_code: str = Form(default=""),
+    doc_id: str = Form(default=""),
+    api_error_object: str = Form(default=""),
+    related_internal_ticket_id: str = Form(default=""),
+    files: list[UploadFile] = File(default=[]),
+    current_user: User = Depends(get_current_user),
+):
+    """Собрать письмо и показать предпросмотр БЕЗ отправки. Текст можно отредактировать."""
+    saved_files = await _save_uploads(files)
+    preview = crpt_email_service.build_new_email_preview(
+        subject=subject.strip(),
+        body=body.strip(),
+        enterprise=enterprise.strip() or None,
+        inn=inn.strip() or None,
+        files=saved_files,
+    )
+    # Состояние формы + список сохранённых файлов — в сессионный state (для шага «Отправить»)
+    request.session[_PREVIEW_STATE_KEY] = {
+        "form": {
+            "subject": subject.strip(),
+            "enterprise": enterprise.strip(),
+            "inn": inn.strip(),
+            "gtin": gtin.strip(),
+            "error_code": error_code.strip(),
+            "doc_id": doc_id.strip(),
+            "api_error_object": api_error_object.strip(),
+            "related_internal_ticket_id": related_internal_ticket_id.strip(),
+        },
+        "files": [str(p) for p in saved_files],
+    }
+    return templates.TemplateResponse("crpt_support/preview.html", {
+        "request": request,
+        "user": current_user,
+        "preview": preview,
+        "attachments_html": _preview_attachments_html(saved_files),
+        "form": request.session[_PREVIEW_STATE_KEY]["form"],
+    })
+
+
+@router.get("/crpt-support/preview/confirm", response_class=HTMLResponse)
+def crpt_email_preview_confirm(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    """JSON-подтверждение: отдать собранный текст письма для правки в форме."""
+    state = request.session.get(_PREVIEW_STATE_KEY)
+    if not state:
+        raise HTTPException(status_code=404, detail="Предпросмотр не найден — заполните форму заново")
+    preview = crpt_email_service.build_new_email_preview(
+        subject=state["form"]["subject"],
+        body=request.query_params.get("body", "") or state["form"].get("body", ""),
+        enterprise=state["form"]["enterprise"] or None,
+        inn=state["form"]["inn"] or None,
+        files=state["files"],
+    )
+    return JSONResponse(content={"ok": True, "preview": preview})
+
+
+@router.post("/crpt-support/preview/send")
+async def crpt_email_preview_send(
+    request: Request,
+    subject: str = Form(...),
+    body: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отправить письмо после просмотра/редактирования текста на шаге предпросмотра."""
+    state = request.session.pop(_PREVIEW_STATE_KEY, None)
+    if not state:
+        raise HTTPException(status_code=400, detail="Данные предпросмотра не найдены — начните с формы обращения")
+    form = state["form"]
+    rel_id = int(form["related_internal_ticket_id"]) if form["related_internal_ticket_id"].isdigit() else None
+
+    try:
+        case = crpt_email_service.create_crpt_ticket(
+            db=db,
+            subject=subject.strip(),
+            body=body.strip(),  # отредактированный пользователем текст
+            enterprise=form["enterprise"] or None,
+            inn=form["inn"] or None,
+            files=[Path(p) for p in state["files"]],
+            gtin=form["gtin"] or None,
+            error_code=form["error_code"] or None,
+            doc_id=form["doc_id"] or None,
+            api_error_object=form["api_error_object"] or None,
+            related_internal_ticket_id=rel_id,
+            created_by_id=current_user.id,
+        )
+    except Exception as exc:
+        logger.exception("Не удалось создать кейс ТП ЧЗ (после предпросмотра)")
+        raise HTTPException(status_code=500, detail=f"Ошибка отправки письма в ТП ЦРПТ: {exc}")
+
+    target = f"/crpt-support/{case.sr_number}" if case.sr_number else "/crpt-support?created=1"
+    return RedirectResponse(url=target, status_code=303)
 
 
 # ──────────────────────────────────────────────
